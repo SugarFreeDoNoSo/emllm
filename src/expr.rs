@@ -13,6 +13,26 @@ pub enum Node {
 }
 
 /// Referencia opaca que conserva la identidad de su arena de origen.
+///
+/// El token compartido permanece vivo mientras exista cualquier referencia;
+/// liberar una arena no permite reutilizar su identidad para esos handles.
+/// La posición local por sí sola no acredita procedencia.
+///
+/// ```
+/// use emllm::expr::{Arena, NodeId};
+/// let mut arena = Arena::new(1);
+/// let id: NodeId = arena.one().unwrap();
+/// assert_eq!(id, id.clone());
+/// assert_eq!(id.index(), 0);
+/// ```
+///
+/// Un consumidor no puede fabricar los campos privados:
+///
+/// ```compile_fail
+/// use emllm::expr::NodeId;
+/// use std::sync::Arc;
+/// let id = NodeId { arena: Arc::new(()), index: 0 };
+/// ```
 #[derive(Clone, Debug)]
 pub struct NodeId {
     arena: Arc<()>,

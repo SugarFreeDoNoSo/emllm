@@ -6,7 +6,7 @@
 
 ## 2. Referencias y frontera estructural
 
-- [ ] 2.1 Encapsular las referencias con procedencia de arena y conservar identidad sin reutilización; verificar operandos y raíces de otra arena con posiciones locales iguales, además de un doctest negativo de fabricación de referencias y su control positivo.
+- [x] 2.1 Encapsular las referencias con procedencia de arena y conservar identidad sin reutilización; verificar operandos y raíces de otra arena con posiciones locales iguales, además de un doctest negativo de fabricación de referencias y su control positivo.
 - [ ] 2.2 Consolidar la compilación iterativa de nodos alcanzables con presupuesto explícito y orden topológico; verificar lista de raíces vacía, orden y duplicados, compartición, presupuesto insuficiente y fixtures internas con ciclos o referencias inexistentes.
 - [ ] 2.3 Introducir o consolidar el programa validado como snapshot propietario e inmutable; verificar que sigue siendo inspeccionable y evaluable tras ampliar y liberar la arena original, y que un consumidor externo no puede fabricar ni modificar sus campos mediante la API segura.
 - [ ] 2.4 Exponer inspección de solo lectura e identificadores de nodos del programa para diagnósticos; verificar que los operandos compartidos se reconocen como el mismo nodo y que todos los identificadores publicados resuelven dentro del snapshot correspondiente.
