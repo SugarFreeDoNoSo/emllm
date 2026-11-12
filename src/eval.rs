@@ -51,6 +51,42 @@ impl fmt::Display for EvalError {
 impl Error for EvalError {}
 
 /// Evalúa cada nodo compartido una sola vez, en el orden ya compilado.
+/// Solo acepta un [`Program`] validado y su presupuesto explícito; no recibe
+/// raíces adicionales. La respuesta contiene todas las salidas o un error.
+///
+/// ```
+/// use emllm::{eval::evaluate, expr::Arena, program::compile};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// let program = compile(&arena, &[one], 1).unwrap();
+/// assert_eq!(evaluate(&program, 1).unwrap(), vec![1.0]);
+/// ```
+///
+/// Una arena no acredita un programa validado:
+///
+/// ```compile_fail
+/// use emllm::{eval::evaluate, expr::Arena};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// evaluate(&arena, 1);
+/// ```
+///
+/// Tampoco una referencia de construcción:
+///
+/// ```compile_fail
+/// use emllm::{eval::evaluate, expr::Arena};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// evaluate(&one, 1);
+/// ```
+///
+/// Ni una colección de nodos inspeccionables, incluso si parece válida:
+///
+/// ```compile_fail
+/// use emllm::{eval::evaluate, expr::Node};
+/// let nodes = vec![Node::One];
+/// evaluate(&nodes, 1);
+/// ```
 pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalError> {
     if program.nodes().len() > max_nodes {
         return Err(EvalError {

@@ -14,7 +14,7 @@
 
 ## 3. Evaluacion aislada y composicion
 
-- [ ] 3.1 Hacer que la entrada pública de evaluación acepte exclusivamente el programa validado y migrar consumidores y ejemplos de la base; verificar mediante doctests que la ruta válida compila y que pasar una arena o referencia aislada directamente no compila.
+- [x] 3.1 Hacer que la entrada pública de evaluación acepte exclusivamente el programa validado y migrar consumidores y ejemplos de la base; verificar mediante doctests que la ruta válida compila y que pasar una arena o referencia aislada directamente no compila.
 - [ ] 3.2 Consolidar errores distinguibles por etapa y categoría, con identificación de nodo cuando corresponda y éxito solo con todas las salidas; verificar un programa de varias raíces con fallo numérico y errores previos a disponer de nodo, sin resultados parciales exitosos.
 - [ ] 3.3 Aislar buffers y configuración por evaluación y conservar presupuestos explícitos; verificar evaluaciones intercaladas, reintento tras presupuesto insuficiente y preservación de raíces y nodos, usando tolerancias de fixtures en lugar de exigir igualdad bit a bit de trascendentes.
 - [ ] 3.4 Verificar la separación estructural/numérica con las expresiones de dominio negativo y desbordamiento descritas en `design.md`; comprobar que ambas compilan estructuralmente, fallan en evaluación con la categoría y nodo esperados y siguen siendo inspeccionables después del fallo.
@@ -60,3 +60,5 @@
 ## Revisión de diagnósticos (2.5)
 
 `cargo test --doc -- --show-output`: 7 ejemplos satisfactorios. Los intentos de fabricar `NodeId` y `Program` fallaron por campos privados (E0451); las asignaciones a vistas de nodos y raíces, por referencias compartidas (E0594). Los tres controles positivos compilaron y se ejecutaron. Ningún fallo dependió de imports o preparación incorrectos. Estos códigos se revisaron en Rust 1.92.0; `compile_fail` en estable no los comprueba automáticamente.
+
+En 3.1, `cargo test --doc eval::evaluate -- --show-output` verificó el control positivo y tres rechazos E0308: `Arena`, `NodeId` y `Vec<Node>` no son `Program`. Los consumidores de la base ya usan exclusivamente programas compilados.
