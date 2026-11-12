@@ -252,16 +252,19 @@ mod tests {
     }
 
     #[test]
-    fn compiles_deep_graphs_without_recursion() {
+    fn compiles_deep_shared_graphs_without_expanding_the_tree() {
         let mut arena = Arena::new(20_001);
-        let one = arena.one().unwrap();
-        let mut root = one.clone();
+        let mut root = arena.one().unwrap();
         for _ in 0..20_000 {
-            root = arena.magma(&root, &one).unwrap();
+            root = arena.magma(&root, &root).unwrap();
         }
+        assert_eq!(arena.pairs().len(), 20_000);
         let program = compile(&arena, &[root], 20_001).unwrap();
         drop(arena);
+        assert_eq!(program.pairs().len(), 20_000);
         assert_eq!(program.node_count(), 20_001);
+        assert_eq!(program.nodes().len(), 20_001);
+        assert_eq!(program.roots(), &[20_000]);
         assert_eq!(
             program.stats(),
             &ProgramStats {
@@ -273,7 +276,8 @@ mod tests {
         );
         for (index, node) in program.nodes().enumerate() {
             if let Node::Magma(left, right) = node {
-                assert!(left < index && right < index);
+                assert_eq!([left, right], [index - 1, index - 1]);
+                assert_eq!(program.pairs()[index - 1], [left, right]);
             }
         }
     }

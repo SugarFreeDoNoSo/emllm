@@ -56,6 +56,25 @@ del evaluador. Eso no cambia la complejidad ciclomática de su código fuente.
 Tampoco menos nodos, menor profundidad o menos decisiones locales demuestran
 por sí solos aceleración, menor memoria real, precisión o cumplimiento de SOLID.
 
+### Recorrido de las tablas compartidas
+
+La representación de pares conserva una fila por Magma único y One implícito
+en el índice lógico 0. `Arena` y `Program` poseen una `PairTable` con pares
+`[usize; 2]` y una marca de presencia de One, sin una colección residente de
+nodos etiquetados. El mapa de internado es un índice auxiliar de la arena.
+`node()` reconstruye una copia y `nodes()` usa un rango con transformación por
+índice, sin asignar un vector de nodos. La compilación lee por índice y emite
+pares directamente; estados, remapeo, pila y profundidades son temporales.
+El evaluador mantiene valores `f64` locales a la llamada, sin desplegar el árbol.
+
+La prueba interna `compiles_deep_shared_graphs_without_expanding_the_tree`
+construye `t0=One`, `ti=Magma(ti-1,ti-1)` hasta i=20.000. Compilación e inspección
+iterativas verifican exactamente 20.000 filas, V=20.001, E=40.000, R=1 y
+D=20.000, sin evaluación numérica. Compartir ambos operandos en cada nivel
+mantiene crecimiento lineal en vez de duplicar subárboles. Las colecciones
+`Node` que algunas pruebas obtienen con `collect` pertenecen al consumidor;
+no son cachés del núcleo ni entradas materializadas por el compilador.
+
 ## Demostración neuronal
 
 ```sh
