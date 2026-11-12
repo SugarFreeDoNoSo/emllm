@@ -23,23 +23,23 @@
 
 ## 4. Inspeccion y reporte del programa
 
-- [ ] 4.1 Calcular y exponer las estadísticas estructurales V, E, R y D al compilar; verificar los valores exactos de One, Magma(One,One), Magma(t,t) y raíces [t,t] establecidos en `eml-complexity-reporting`.
-- [ ] 4.2 Verificar exclusión de nodos no alcanzables y estabilidad de estadísticas tras ampliar/liberar la arena o fallar una evaluación; añadir además un caso de cadena profunda dentro del presupuesto que complete compilación e inspección sin depender de recursión ni de evaluación numérica.
-- [ ] 4.3 Ampliar la demostración neuronal para informar estadísticas por programa junto a presupuestos y errores observados; ejecutar las tres fixtures originales y comprobar que conservan su tolerancia de 1e-6 y el orden de sus salidas.
-- [ ] 4.4 Documentar la API de estadísticas e iniciar `docs/complexity.md` con sus definiciones y el modelo O(V + E + R); verificar que los ejemplos coinciden con los casos de prueba y distinguen almacenamiento modelado, medidas reales y alcance de las fixtures.
+- [x] 4.1 Calcular y exponer las estadísticas estructurales V, E, R y D al compilar; verificar los valores exactos de One, Magma(One,One), Magma(t,t) y raíces [t,t] establecidos en `eml-complexity-reporting`.
+- [x] 4.2 Verificar exclusión de nodos no alcanzables y estabilidad de estadísticas tras ampliar/liberar la arena o fallar una evaluación; añadir además un caso de cadena profunda dentro del presupuesto que complete compilación e inspección sin depender de recursión ni de evaluación numérica.
+- [x] 4.3 Ampliar la demostración neuronal para informar estadísticas por programa junto a presupuestos y errores observados; ejecutar las tres fixtures originales y comprobar que conservan su tolerancia de 1e-6 y el orden de sus salidas.
+- [x] 4.4 Documentar la API de estadísticas e iniciar `docs/complexity.md` con sus definiciones y el modelo O(V + E + R); verificar que los ejemplos coinciden con los casos de prueba y distinguen almacenamiento modelado, medidas reales y alcance de las fixtures.
 
 ## 5. Medicion reproducible del codigo
 
-- [ ] 5.1 Seleccionar y fijar una versión publicada o revisión Git exacta de `rust-code-analysis-cli` que reconozca las fuentes reales del núcleo; verificar cobertura de archivos y errores de parsing y registrar la instalación reproducible y la procedencia exacta en `docs/complexity.md`.
-- [ ] 5.2 Completar la receta documental de exportación JSON y metadatos bajo `target/analysis/`, incluyendo revisión, cambios locales, fuentes adicionales, comando y alcance; ejecutar los comandos documentados y verificar que los resultados por archivo y unidad pueden vincularse con esas fuentes.
-- [ ] 5.3 Generar el primer reporte del núcleo y repetir la receta con las mismas fuentes y revisión del analizador; verificar consistencia de los valores por unidad y documentar número de unidades, máximo observado, tratamiento de cierres, pruebas inline, macros y agregados sin doble conteo.
-- [ ] 5.4 Documentar y comprobar las salidas del procedimiento ante herramienta ausente, fuentes ausentes o análisis incompleto; verificar que esos estados no se presentan como métricas cero y que la biblioteca y sus pruebas funcionales siguen funcionando sin el analizador instalado.
-- [ ] 5.5 Añadir a la guía un ejemplo interpretativo de extracción de funciones y las reglas para comparar revisiones; verificar que identifica cambios de denominador/convención y no presenta menor complejidad local como prueba de rendimiento, corrección o cumplimiento de SOLID.
+- [x] 5.1 Seleccionar y fijar una versión publicada o revisión Git exacta de `rust-code-analysis-cli` que reconozca las fuentes reales del núcleo; verificar cobertura de archivos y errores de parsing y registrar la instalación reproducible y la procedencia exacta en `docs/complexity.md`.
+- [x] 5.2 Completar la receta documental de exportación JSON y metadatos bajo `target/analysis/`, incluyendo revisión, cambios locales, fuentes adicionales, comando y alcance; ejecutar los comandos documentados y verificar que los resultados por archivo y unidad pueden vincularse con esas fuentes.
+- [x] 5.3 Generar el primer reporte del núcleo y repetir la receta con las mismas fuentes y revisión del analizador; verificar consistencia de los valores por unidad y documentar número de unidades, máximo observado, tratamiento de cierres, pruebas inline, macros y agregados sin doble conteo.
+- [x] 5.4 Documentar y comprobar las salidas del procedimiento ante herramienta ausente, fuentes ausentes o análisis incompleto; verificar que esos estados no se presentan como métricas cero y que la biblioteca y sus pruebas funcionales siguen funcionando sin el analizador instalado.
+- [x] 5.5 Añadir a la guía un ejemplo interpretativo de extracción de funciones y las reglas para comparar revisiones; verificar que identifica cambios de denominador/convención y no presenta menor complejidad local como prueba de rendimiento, corrección o cumplimiento de SOLID.
 
 ## 6. Integracion y cierre de implementacion
 
-- [ ] 6.1 Enlazar ambas guías desde README y verificar que sus nombres de API, rutas y comandos corresponden a los entregables reales, que cubren los escenarios de las dos especificaciones nuevas y que identifican las limitaciones numéricas y de medición.
-- [ ] 6.2 Ejecutar `cargo test --release`, `cargo test --doc`, `cargo fmt --check` y `cargo clippy --all-targets -- -D warnings`; comprobar que pasan los contratos nuevos y las regresiones de racionales, operaciones y red de `implement-one-magma-eml`, y registrar los resultados junto al reporte de complejidad.
+- [x] 6.1 Enlazar ambas guías desde README y verificar que sus nombres de API, rutas y comandos corresponden a los entregables reales, que cubren los escenarios de las dos especificaciones nuevas y que identifican las limitaciones numéricas y de medición.
+- [x] 6.2 Ejecutar `cargo test --release`, `cargo test --doc`, `cargo fmt --check` y `cargo clippy --all-targets -- -D warnings`; comprobar que pasan los contratos nuevos y las regresiones de racionales, operaciones y red de `implement-one-magma-eml`, y registrar los resultados junto al reporte de complejidad.
 
 ## Flujo de ejecución
 

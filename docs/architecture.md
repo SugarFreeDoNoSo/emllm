@@ -33,7 +33,10 @@ Rational / Network221 → Arena + NodeId → compile → Program
 - `Program::nodes()` y `roots()` devuelven vistas inmutables. `node(index)`
   resuelve una posición del snapshot o devuelve `None`. Los índices de operandos,
   raíces y errores son locales al programa que los publicó: no son `NodeId`,
-  identificadores persistentes ni referencias intercambiables entre snapshots.
+   identificadores persistentes ni referencias intercambiables entre snapshots.
+- `Program::stats()` consulta en O(1) los conteos V/E/R/D calculados al compilar.
+  No evalúa operaciones numéricas; sus definiciones, costes y alcance están en
+  [estadísticas y complejidad](complexity.md).
 - `evaluate(&program, max_nodes)` devuelve una salida por posición de raíz o un
   error. No acepta una arena, un handle ni una lista de nodos sin validar. No
   vuelve a validar procedencia/ciclos ni introduce `unsafe` para evitar los
@@ -149,3 +152,18 @@ referencial numérica estricta ni igualdad bit a bit entre llamadas.
 Las pruebas usan `1e-12` para e, `1e-9` para racionales, `1e-8` para las operaciones
 documentadas y `1e-6` para las tres fixtures neuronales. Son criterios locales de
 aceptación; no constituyen una cota global para cualquier DAG.
+
+## Evidencia de los contratos
+
+| Contrato | Verificación del crate |
+| --- | --- |
+| Procedencia y referencias opacas | `tests/contracts.rs`, pruebas y doctests de `src/expr.rs` |
+| Raíces, compartición, referencias inexistentes, ciclos y recorrido profundo | `tests/contracts.rs` y pruebas internas de `src/program.rs` |
+| Snapshot independiente e inspección inmutable | `tests/contracts.rs`, `tests/statistics.rs` y doctests de `Program` |
+| Entrada validada, errores numéricos, salidas completas y aislamiento | Doctests de `evaluate`, `tests/evaluation.rs`, `tests/contracts.rs` y pruebas internas de `src/eval.rs` |
+| Estadísticas exactas y estables, sin evaluación | `tests/statistics.rs` y pruebas internas de `src/program.rs` |
+| Tolerancias de la base | `tests/synthesis.rs`, `tests/network.rs` y `examples/infer.rs` |
+
+La [guía de complejidad](complexity.md) registra además cobertura de fuentes,
+repetibilidad, estados no disponibles/incompletos y funcionamiento sin el
+analizador. Esas comprobaciones documentales complementan las pruebas del crate.

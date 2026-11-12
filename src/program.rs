@@ -59,9 +59,41 @@ pub use crate::expr::Node;
 pub struct Program {
     nodes: Vec<Node>,
     roots: Vec<usize>,
+    stats: ProgramStats,
+}
+
+/// Estadísticas de la clausura alcanzable, calculadas al compilar.
+/// No cuentan nodos de la arena fuera del programa ni evalúan exp/ln.
+/// La consulta permanece estable aunque se libere la arena o falle la evaluación.
+/// Son conteos estructurales, no medidas de bytes, tiempo o complejidad del código.
+///
+/// ```
+/// use emllm::{expr::Arena, program::{ProgramStats, compile}};
+/// let mut arena = Arena::new(3);
+/// let one = arena.one().unwrap();
+/// let t = arena.magma(&one, &one).unwrap();
+/// let root = arena.magma(&t, &t).unwrap();
+/// let program = compile(&arena, &[root], 3).unwrap();
+/// assert_eq!(program.stats(), &ProgramStats { nodes: 3, edges: 4, roots: 1, depth: 2 });
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProgramStats {
+    /// V: nodos únicos.
+    pub nodes: usize,
+    /// E: posiciones de operando, incluso si repiten el mismo hijo.
+    pub edges: usize,
+    /// R: posiciones de raíz, incluidos duplicados.
+    pub roots: usize,
+    /// D: profundidad máxima en enlaces; One tiene profundidad cero.
+    pub depth: usize,
 }
 
 impl Program {
+    /// Consulta constante de estadísticas, sin evaluación ni recorrido adicional.
+    pub fn stats(&self) -> &ProgramStats {
+        &self.stats
+    }
+
     /// Vista inmutable en orden de evaluación. Sus posiciones identifican nodos
     /// únicamente dentro de este snapshot, incluidos los operandos de Magma.
     pub fn nodes(&self) -> &[Node] {
@@ -130,6 +162,8 @@ fn compile_nodes(
     let mut states = HashMap::new();
     let mut remapped = HashMap::new();
     let mut nodes = Vec::new();
+    let mut depths: Vec<usize> = Vec::new();
+    let mut edges = 0;
     let mut stack = Vec::new();
 
     for &root in roots {
@@ -139,12 +173,21 @@ fn compile_nodes(
                 .get(index)
                 .ok_or(CompileError::InvalidReference { index })?;
             if exiting {
-                let compiled = match node {
-                    Node::One => Node::One,
-                    Node::Magma(left, right) => Node::Magma(remapped[&left], remapped[&right]),
+                let (compiled, depth) = match node {
+                    Node::One => (Node::One, 0),
+                    Node::Magma(left, right) => {
+                        let left = remapped[&left];
+                        let right = remapped[&right];
+                        edges += 2;
+                        (
+                            Node::Magma(left, right),
+                            1 + depths[left].max(depths[right]),
+                        )
+                    }
                 };
                 remapped.insert(index, nodes.len());
                 nodes.push(compiled);
+                depths.push(depth);
                 states.insert(index, 2);
                 continue;
             }
@@ -166,6 +209,12 @@ fn compile_nodes(
     }
 
     Ok(Program {
+        stats: ProgramStats {
+            nodes: nodes.len(),
+            edges,
+            roots: roots.len(),
+            depth: depths.into_iter().max().unwrap_or(0),
+        },
         nodes,
         roots: roots.iter().map(|root| remapped[root]).collect(),
     })
@@ -200,7 +249,17 @@ mod tests {
             root = arena.magma(&root, &one).unwrap();
         }
         let program = compile(&arena, &[root], 20_001).unwrap();
+        drop(arena);
         assert_eq!(program.nodes().len(), 20_001);
+        assert_eq!(
+            program.stats(),
+            &ProgramStats {
+                nodes: 20_001,
+                edges: 40_000,
+                roots: 1,
+                depth: 20_000,
+            }
+        );
         for (index, node) in program.nodes().iter().enumerate() {
             if let Node::Magma(left, right) = node {
                 assert!(*left < index && *right < index);
