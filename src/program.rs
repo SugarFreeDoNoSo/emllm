@@ -233,7 +233,17 @@ mod tests {
             root = arena.magma(&root, &one).unwrap();
         }
         let program = compile(&arena, &[root], 20_001).unwrap();
+        drop(arena);
         assert_eq!(program.nodes().len(), 20_001);
+        assert_eq!(
+            program.stats(),
+            &ProgramStats {
+                nodes: 20_001,
+                edges: 40_000,
+                roots: 1,
+                depth: 20_000,
+            }
+        );
         for (index, node) in program.nodes().iter().enumerate() {
             if let Node::Magma(left, right) = node {
                 assert!(*left < index && *right < index);
