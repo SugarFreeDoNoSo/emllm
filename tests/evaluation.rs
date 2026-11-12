@@ -1,5 +1,5 @@
 use emllm::eval::{EvalError, EvalErrorKind, evaluate};
-use emllm::expr::Arena;
+use emllm::expr::{Arena, Node};
 use emllm::program::compile;
 
 #[test]
@@ -34,19 +34,29 @@ fn numerical_failures_report_the_compiled_node() {
     ] {
         let program = compile(&arena, &[one.clone(), root], 10).unwrap();
         let nodes = program.nodes().collect::<Vec<_>>();
+        let pairs = program.pairs().to_vec();
         let roots = program.roots().to_vec();
         let stats = *program.stats();
+        let error = evaluate(&program, 10).unwrap_err();
         assert_eq!(
-            evaluate(&program, 10),
-            Err(EvalError {
+            error,
+            EvalError {
                 kind,
                 node: Some(program.roots()[1]),
-            })
+            }
         );
         assert_eq!(program.nodes().collect::<Vec<_>>(), nodes);
+        assert_eq!(program.pairs(), pairs);
         assert_eq!(program.roots(), roots);
         assert_eq!(program.stats(), &stats);
         assert_eq!(program.node(roots[1]), Some(nodes[roots[1]]));
+        let failed = error.node.unwrap();
+        let Node::Magma(left, right) = program.node(failed).unwrap() else {
+            panic!("expected a numerical failure at a Magma");
+        };
+        assert_eq!(program.pairs()[failed - 1], [left, right]);
+        assert!(program.node(left).is_some());
+        assert!(program.node(right).is_some());
     }
 }
 

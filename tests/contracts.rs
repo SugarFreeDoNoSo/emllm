@@ -102,9 +102,10 @@ fn inspection_resolves_shared_operands_in_their_own_snapshot() {
 #[test]
 fn errors_distinguish_stages_and_never_return_partial_outputs() {
     assert_eq!(Arena::new(0).one(), Err(BuildError::NodeLimit { limit: 0 }));
-    let mut arena = Arena::new(6);
+    let mut arena = Arena::new(7);
     let one = arena.one().unwrap();
     let a = arena.magma(&one, &one).unwrap();
+    arena.magma(&one, &a).unwrap(); // Excluido; desplaza el índice del fallo.
     let b = arena.magma(&a, &one).unwrap();
     let c = arena.magma(&b, &one).unwrap();
     let overflow = arena.magma(&c, &one).unwrap();
@@ -119,6 +120,10 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
         Err(CompileError::NodeLimit { limit: 0 })
     ));
     let program = compile(&arena, &roots, 6).unwrap();
+    let nodes = program.nodes().collect::<Vec<_>>();
+    let pairs = program.pairs().to_vec();
+    let compiled_roots = program.roots().to_vec();
+    let stats = *program.stats();
     assert_eq!(
         evaluate(&program, 0),
         Err(EvalError {
@@ -130,10 +135,13 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
         panic!("expected a dependent Magma");
     };
     assert_ne!(failing_node, program.roots()[1]);
-    assert!(matches!(
-        program.node(failing_node),
-        Some(Node::Magma(_, _))
-    ));
+    assert_ne!(failing_node, overflow.index());
+    let Node::Magma(left, right) = program.node(failing_node).unwrap() else {
+        panic!("expected a failing Magma dependency");
+    };
+    assert_eq!(program.pairs()[failing_node - 1], [left, right]);
+    assert_eq!(program.node(left), Some(Node::Magma(2, 0)));
+    assert_eq!(program.node(right), Some(Node::One));
     assert_eq!(
         evaluate(&program, 6),
         Err(EvalError {
@@ -141,6 +149,10 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
             node: Some(failing_node),
         })
     );
+    assert_eq!(program.nodes().collect::<Vec<_>>(), nodes);
+    assert_eq!(program.pairs(), pairs);
+    assert_eq!(program.roots(), compiled_roots);
+    assert_eq!(program.stats(), &stats);
 }
 
 #[test]
@@ -153,8 +165,23 @@ fn interleaved_evaluations_and_budget_retries_preserve_the_program() {
     let large = arena.magma(&ee, &one).unwrap();
     let overflow = arena.magma(&large, &one).unwrap();
     let bad = compile(&arena, &[overflow], 5).unwrap();
-    let nodes = good.nodes().collect::<Vec<_>>();
-    let roots = good.roots().to_vec();
+    let snapshots = [&good, &bad].map(|program| {
+        (
+            program,
+            program.nodes().collect::<Vec<_>>(),
+            program.pairs().to_vec(),
+            program.roots().to_vec(),
+            *program.stats(),
+        )
+    });
+    let assert_preserved = || {
+        for (program, nodes, pairs, roots, stats) in &snapshots {
+            assert!(program.nodes().eq(nodes.iter().copied()));
+            assert_eq!(program.pairs(), pairs);
+            assert_eq!(program.roots(), roots);
+            assert_eq!(program.stats(), stats);
+        }
+    };
     drop(arena);
 
     for _ in 0..2 {
@@ -163,17 +190,28 @@ fn interleaved_evaluations_and_budget_retries_preserve_the_program() {
         assert!((result[0] - std::f64::consts::E).abs() <= 1e-12);
         assert_eq!(result[1], 1.0);
         assert!((result[2] - std::f64::consts::E).abs() <= 1e-12);
+        assert_preserved();
         assert_eq!(
-            evaluate(&bad, 5).unwrap_err().kind,
-            EvalErrorKind::ExponentialOverflow
+            evaluate(&bad, 5),
+            Err(EvalError {
+                kind: EvalErrorKind::ExponentialOverflow,
+                node: Some(bad.roots()[0]),
+            })
         );
+        assert_preserved();
         assert_eq!(
-            evaluate(&good, 1).unwrap_err().kind,
-            EvalErrorKind::NodeLimit { limit: 1 }
+            evaluate(&good, 1),
+            Err(EvalError {
+                kind: EvalErrorKind::NodeLimit { limit: 1 },
+                node: None,
+            })
         );
+        assert_preserved();
     }
     let retry = evaluate(&good, 2).unwrap();
+    assert_eq!(retry.len(), 3);
     assert!((retry[0] - std::f64::consts::E).abs() <= 1e-12);
-    assert_eq!(good.nodes().collect::<Vec<_>>(), nodes);
-    assert_eq!(good.roots(), roots);
+    assert_eq!(retry[1], 1.0);
+    assert!((retry[2] - std::f64::consts::E).abs() <= 1e-12);
+    assert_preserved();
 }

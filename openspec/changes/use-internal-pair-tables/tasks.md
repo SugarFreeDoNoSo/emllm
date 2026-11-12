@@ -24,7 +24,7 @@
 ## 5. Evaluacion directa y contratos numericos
 
 - [x] 5.1 Adaptar `evaluate` al recorrido directo de pares, inicializando One tras comprobar el presupuesto lógico y usando fila+1 para diagnósticos; documentar esta correspondencia y verificar One, Magma(One,One), raíces [1,0,1], presupuesto cero con tabla vacía y los errores de dominio/desbordamiento de la base sin cambiar la semántica numérica.
-- [ ] 5.2 Verificar que el fallo de una dependencia entre varias raíces devuelve un error resoluble por inspección sin salidas parciales; ejecutar evaluaciones intercaladas y reintentos de presupuesto, comprobando preservación de pares/raíces/estadísticas y tolerancias. Revisar que `f64` sigue limitado a los valores de evaluación y que no se introducen clamps, reconocimiento de expansiones ni referencia convencional en producción.
+- [x] 5.2 Verificar que el fallo de una dependencia entre varias raíces devuelve un error resoluble por inspección sin salidas parciales; ejecutar evaluaciones intercaladas y reintentos de presupuesto, comprobando preservación de pares/raíces/estadísticas y tolerancias. Revisar que `f64` sigue limitado a los valores de evaluación y que no se introducen clamps, reconocimiento de expansiones ni referencia convencional en producción.
 
 ## 6. Evidencia de almacenamiento y guia de migracion
 
@@ -61,3 +61,4 @@
 
 - 3.2: `cargo test --doc expr:: -- --show-output` pasó cuatro ejemplos. La escritura en `Arena::pairs()` falló por referencia compartida (E0594) y la fabricación de `NodeId`, por campos privados (E0451); ambos controles positivos pasaron. Los fallos no dependen de firmas desaparecidas ni de imports inválidos.
 - 4.4: `cargo test --doc program:: -- --show-output` pasó seis ejemplos: tres controles positivos y tres negativos. Escribir pares o raíces produce E0594; fabricar `Program` con raíces arbitrarias produce E0451 sobre los campos reales `table`, `roots` y `stats`.
+- 5.2: ocho pruebas de contratos/evaluación y tres de frontera numérica pasaron en release, junto con formato. Los fallos de dominio/desbordamiento resuelven a `node(i)` y `pairs()[i-1]`; una dependencia fallida se distingue de su raíz y del índice de arena. Ambos snapshots conservan nodos, pares, raíces y estadísticas tras llamadas intercaladas y reintentos, con tolerancia 1e-12 para e. La comparación con `fdb5880` confirma `magma_value`, `synth`, `network` y las dependencias Cargo sin cambios; en producción los `f64` siguen en evaluación, sin clamps, reconocimiento de expansiones ni referencia convencional.
