@@ -76,3 +76,64 @@ la arena compartida terminó con 1.684 nodos. Todas las salidas satisfacen `1e-6
 frente a la referencia independiente. Son observaciones de estas tres fixtures,
 no una cota global de precisión ni un benchmark de rendimiento. Los errores de
 dominio y desbordamiento siguen siendo posibles en otros programas válidos.
+
+## Analizador externo y procedencia
+
+Se seleccionó `rust-code-analysis-cli` del repositorio
+[`mozilla/rust-code-analysis`](https://github.com/mozilla/rust-code-analysis),
+commit **`37e5d83c056c8cbf827223d5814a93c5218df1a9`**. Esta revisión usa edición
+2024, `tree-sitter = 0.25.3` y `tree-sitter-rust = 0.23.2`. El ejecutable informa
+`0.0.25`, igual que una publicación anterior con otras dependencias: ese número
+solo no identifica el analizador utilizado.
+
+Instalación ejecutada desde la raíz, con Cargo/Rust 1.92.0 y un compilador C
+disponible para las gramáticas de Tree-sitter:
+
+```sh
+cargo install --git https://github.com/mozilla/rust-code-analysis \
+  --rev 37e5d83c056c8cbf827223d5814a93c5218df1a9 --locked \
+  --root target/analysis/tools/rca-37e5d83 \
+  --bin rust-code-analysis-cli rust-code-analysis-cli
+target/analysis/tools/rca-37e5d83/bin/rust-code-analysis-cli --version
+```
+
+Cargo descarga también los submódulos del repositorio. Además, avisa que ese
+commit no publica `Cargo.lock`: **`--locked` no fija aquí las dependencias
+transitivas**. La receta fija las fuentes del analizador y su gramática Rust;
+no promete reconstruir un binario idéntico. Para repetir exactamente esta
+medición se conserva el ejecutable local y se identifica por SHA-256, junto a
+la salida de instalación y el registro `.crates2.json` de Cargo. Una instalación
+nueva debe repetir la comprobación de compatibilidad y registrar su propio hash.
+Estos archivos son evidencia de desarrollo bajo `target/analysis/`, ignorada
+por Git; conservar ese directorio si se necesita comparar después.
+
+Binario utilizado en `aarch64-apple-darwin`:
+`8ca02c1b389db24ec87a43ed04d3e7f64c9567897c67305aed81b078bbd53351`.
+El motor no tiene dependencias Cargo del analizador ni lo invoca.
+
+### Compatibilidad comprobada (tarea 5.1)
+
+Sobre las fuentes de `5c87381`, sin modificaciones locales en `src`, se ejecutó:
+
+```sh
+mkdir -p target/analysis/compatibility/cc
+target/analysis/tools/rca-37e5d83/bin/rust-code-analysis-cli \
+  -m -p src -I '*.rs' -O json -o target/analysis/compatibility/cc
+target/analysis/tools/rca-37e5d83/bin/rust-code-analysis-cli \
+  -p src -I '*.rs' -f error
+```
+
+Se comparó el inventario `src/**/*.rs` con el campo `name` de todos los JSON:
+**6/6 archivos** (`eval`, `expr`, `lib`, `network`, `program`, `synth`), sin
+omisiones, duplicados, stderr ni nodos con error de parsing. Un control separado
+con `fn broken( {` sí produjo `ERROR` y su localización, aunque el CLI devolvió
+código de salida cero. Por eso el procedimiento comprueba tanto la cobertura
+como el contenido de la salida de `-f error`; el exit code por sí solo no basta.
+La búsqueda usa `has_error()` del árbol de sintaxis, incluidos errores en hijos.
+Esto acredita estas fuentes reales, no toda la sintaxis posible de Rust 2024.
+
+El JSON y los logs de esta comprobación están en
+`target/analysis/compatibility/`. Referencias del procedimiento:
+[exportación de métricas](https://mozilla.github.io/rust-code-analysis/commands/metrics.html),
+[búsqueda de errores](https://mozilla.github.io/rust-code-analysis/commands/nodes.html)
+y [fuentes fijadas del CLI](https://github.com/mozilla/rust-code-analysis/tree/37e5d83c056c8cbf827223d5814a93c5218df1a9/rust-code-analysis-cli).
