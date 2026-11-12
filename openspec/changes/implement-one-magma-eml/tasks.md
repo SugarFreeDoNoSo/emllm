@@ -11,7 +11,7 @@
 
 - [x] 2.1 Implementar recorrido topológico iterativo y evaluación f64; verificar One, Magma(One,One) y expresiones compartidas contra valores independientes con las tolerancias especificadas.
 - [x] 2.2 Implementar errores de dominio, desbordamiento, valores no finitos y límites; verificar casos que fuerzan cada error y comprobar que incluyen el nodo responsable cuando corresponda.
-- [ ] 2.3 Documentar precisión, cancelación y subdesbordamiento; verificar que no existen clamps ni sustituciones numéricas encubiertas en la ruta de evaluación.
+- [x] 2.3 Documentar precisión, cancelación y subdesbordamiento; verificar que no existen clamps ni sustituciones numéricas encubiertas en la ruta de evaluación.
 
 ## 3. Síntesis pura
 
