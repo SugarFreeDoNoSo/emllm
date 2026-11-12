@@ -7,7 +7,7 @@
 ## 2. Migracion compilable de la inspeccion
 
 - [x] 2.1 Cambiar `Arena::nodes()` y `Program::nodes()` a iteradores de valores `Node`, añadir `node_count()` y consulta por valor en ambos tipos y adaptar el lector privado del compilador sin materializar un vector de entrada; migrar todos los consumidores, ejemplos y documentación afectada, verificando `cargo check --all-targets`, las pruebas existentes y los doctests con la representación temporal aún etiquetada.
-- [ ] 2.2 Añadir pruebas de consulta e iteración por valor para arena vacía y los tres nodos One, Magma(0,0), Magma(1,1); verificar longitud exacta y decreciente del iterador, ausencia fuera de rango incluido `usize::MAX` e independencia de una copia modificada. Revisar las rutas de consulta para comprobar que no asignan una colección de nodos y documentar el contrato de copia.
+- [x] 2.2 Añadir pruebas de consulta e iteración por valor para arena vacía y los tres nodos One, Magma(0,0), Magma(1,1); verificar longitud exacta y decreciente del iterador, ausencia fuera de rango incluido `usize::MAX` e independencia de una copia modificada. Revisar las rutas de consulta para comprobar que no asignan una colección de nodos y documentar el contrato de copia.
 
 ## 3. Arena con pares e identidad preservada
 

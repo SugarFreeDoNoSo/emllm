@@ -36,7 +36,11 @@ Rational / Network221 → Arena + NodeId → compile → Program
   de nodos y cambiar una copia no modifica la estructura. `Program::roots()`
   conserva su slice inmutable. Los índices de operandos,
   raíces y errores son locales al programa que los publicó: no son `NodeId`,
-   identificadores persistentes ni referencias intercambiables entre snapshots.
+  identificadores persistentes ni referencias intercambiables entre snapshots.
+  Cada iterador informa los nodos restantes mediante `len()`, incluso después
+  de avanzar. `node(usize::MAX)` devuelve `None`. Guardar una copia o una
+  colección obtenida con `collect` es decisión del consumidor, no una caché del
+  núcleo; `tests/inspection.rs` comprueba esos contratos y la copia independiente.
 - `Program::stats()` consulta en O(1) los conteos V/E/R/D calculados al compilar.
   No evalúa operaciones numéricas; sus definiciones, costes y alcance están en
   [estadísticas y complejidad](complexity.md).
