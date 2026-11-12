@@ -7,7 +7,22 @@ El núcleo Rust construye DAGs cerrados, los compila en orden topológico y los
 evalúa en `f64`. Incluye síntesis racional acotada y una red 2-2-1 cuyos pesos,
 entradas, sesgos y operaciones se expanden a One/Magma antes de evaluar.
 La planificación y el seguimiento están en
-[`openspec/changes/implement-one-magma-eml/`](openspec/changes/implement-one-magma-eml/).
+[`implement-one-magma-eml`](openspec/changes/implement-one-magma-eml/) y
+[`formalize-rust-core-contracts`](openspec/changes/formalize-rust-core-contracts/).
+
+## Guías del núcleo
+
+- [Arquitectura y contratos](docs/architecture.md): ciclo de vida
+  `Arena → compile → Program → evaluate`, procedencia, snapshots inmutables,
+  errores por etapa, aislamiento y criterios SOLID.
+- [Estadísticas y complejidad](docs/complexity.md): `Program::stats()`, modelo
+  de coste, evidencia de las fixtures y receta reproducible del analizador
+  externo, con cobertura, limitaciones y reglas para comparar revisiones.
+
+El análisis ciclomático es opcional para desarrollar y ejecutar el motor.
+Sus cifras describen código fuente; V/E/R/D describen el DAG y los errores
+numéricos describen las fixtures. Ninguna de estas métricas, por sí sola,
+demuestra rendimiento, memoria real, precisión general o cumplimiento de SOLID.
 
 ## Ejecutar y verificar el núcleo
 
@@ -20,23 +35,26 @@ Desde la raíz del repositorio:
 ```sh
 cargo check
 cargo test --release
+cargo test --doc -- --show-output
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+cargo doc --no-deps
 cargo run --release --example infer
 ```
 
 La demostración construye los tres programas completos antes de evaluarlos.
 Usa presupuestos explícitos de 100.000 nodos para construcción, compilación y
-evaluación; informa los nodos alcanzables, la referencia independiente, el error
-absoluto y la tolerancia. Termina con error si una fixture no satisface `1e-6`.
+evaluación; informa V (nodos únicos), E (enlaces de operandos), R (posiciones de
+raíz), D (profundidad en enlaces), la referencia independiente, el error absoluto
+y la tolerancia. Termina con error si una fixture no satisface `1e-6`.
 
 Resultados locales de la demostración en release:
 
-| Entrada | Salida EML | Nodos alcanzables | Error absoluto observado |
+| Entrada | Salida EML | (V, E, R, D) | Error absoluto observado |
 | --- | --- | --- | --- |
-| `[0, 0]` | 0.110599608464273 | 614 | 2.426e-14 |
-| `[1/2, -1/2]` | 0.104508979170250 | 676 | 9.104e-15 |
-| `[-1/2, 1/2]` | -0.080306139871040 | 676 | 4.829e-15 |
+| `[0, 0]` | 0.110599608464273 | (614, 1226, 1, 148) | 2.426e-14 |
+| `[1/2, -1/2]` | 0.104508979170250 | (676, 1350, 1, 148) | 9.104e-15 |
+| `[-1/2, 1/2]` | -0.080306139871040 | (676, 1350, 1, 150) | 4.829e-15 |
 
 La arena compartida contiene 1.684 nodos después de construir las tres entradas.
 Estos resultados proceden de este motor, no de un prototipo externo. Son
@@ -53,9 +71,9 @@ precisión o rendimiento.
 - `synth`: racionales normalizados con `abs(p)<=2` y `1<=q<=2`, suma, negación,
   resta y producto mediante las [expansiones derivadas](docs/synthesis.md).
   Los enteros de la frontera son metadatos, nunca hojas ejecutables.
-- `eval`: únicamente One y Magma. Los fallos de dominio, desbordamiento, no
-  finitud y presupuesto se devuelven como errores identificables; los fallos
-  numéricos señalan el nodo del programa compilado.
+- `eval`: recibe únicamente `&Program` validado y ejecuta One/Magma. Los fallos
+  de dominio, desbordamiento, no finitud y presupuesto se devuelven como errores
+  identificables; los fallos numéricos señalan el nodo del programa compilado.
 - `network`: red 2-2-1 con activación `exp(-z*z)`, parámetros racionales y
   validación de dimensiones antes de construir. La referencia convencional
   está fuera de la biblioteca, en pruebas y demostración.

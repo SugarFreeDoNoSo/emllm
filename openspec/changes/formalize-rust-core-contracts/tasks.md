@@ -38,7 +38,7 @@
 
 ## 6. Integracion y cierre de implementacion
 
-- [ ] 6.1 Enlazar ambas guías desde README y verificar que sus nombres de API, rutas y comandos corresponden a los entregables reales, que cubren los escenarios de las dos especificaciones nuevas y que identifican las limitaciones numéricas y de medición.
+- [x] 6.1 Enlazar ambas guías desde README y verificar que sus nombres de API, rutas y comandos corresponden a los entregables reales, que cubren los escenarios de las dos especificaciones nuevas y que identifican las limitaciones numéricas y de medición.
 - [ ] 6.2 Ejecutar `cargo test --release`, `cargo test --doc`, `cargo fmt --check` y `cargo clippy --all-targets -- -D warnings`; comprobar que pasan los contratos nuevos y las regresiones de racionales, operaciones y red de `implement-one-magma-eml`, y registrar los resultados junto al reporte de complejidad.
 
 ## Flujo de ejecución
