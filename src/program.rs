@@ -53,6 +53,9 @@ impl Error for CompileError {
 }
 
 /// Compila únicamente nodos alcanzables; no realiza evaluación numérica.
+/// Visita primero el operando izquierdo y conserva el orden y los duplicados de
+/// las raíces. Una misma estructura y lista de raíces producen el mismo orden.
+/// El límite cuenta nodos únicos alcanzables, no posiciones de raíz.
 pub fn compile(arena: &Arena, roots: &[NodeId], max_nodes: usize) -> Result<Program, CompileError> {
     arena.validate_roots(roots).map_err(CompileError::Roots)?;
     let roots: Vec<_> = roots.iter().map(NodeId::index).collect();
