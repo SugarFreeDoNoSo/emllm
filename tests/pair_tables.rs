@@ -1,5 +1,5 @@
 use emllm::expr::{Arena, BuildError, Node};
-use emllm::program::{CompileError, compile};
+use emllm::program::{CompileError, Program, compile};
 
 #[test]
 fn arena_stores_magma_pairs_with_lazy_implicit_one() {
@@ -113,4 +113,30 @@ fn compilation_remaps_repeated_roots_and_excludes_unreachable_rows() {
     ));
     assert_eq!(program.pairs(), &[[0, 0], [1, 1]]);
     assert_eq!(program.roots(), &[2, 0, 2]);
+}
+
+#[test]
+fn snapshots_own_their_pairs_after_arena_growth_and_destruction() {
+    let mut arena = Arena::new(5);
+    let one = arena.one().unwrap();
+    let t = arena.magma(&one, &one).unwrap();
+    let parent = arena.magma(&t, &t).unwrap();
+    let program = compile(&arena, &[parent.clone(), one.clone(), parent.clone()], 3).unwrap();
+    let cloned = program.clone();
+    let nodes = program.nodes().collect::<Vec<_>>();
+    let stats = *program.stats();
+    let inspect = |snapshot: &Program| {
+        assert_eq!(snapshot.pairs(), &[[0, 0], [1, 1]]);
+        assert_eq!(snapshot.roots(), &[2, 0, 2]);
+        assert_eq!(snapshot.nodes().collect::<Vec<_>>(), nodes);
+        assert_eq!(snapshot.stats(), &stats);
+    };
+    let more = arena.magma(&parent, &one).unwrap();
+    arena.magma(&more, &parent).unwrap();
+    assert_eq!(arena.node_count(), 5);
+    inspect(&program);
+    inspect(&cloned);
+    drop(arena);
+    inspect(&program);
+    inspect(&cloned);
 }

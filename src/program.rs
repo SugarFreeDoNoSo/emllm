@@ -119,6 +119,18 @@ impl Program {
     /// Tabla residente de solo lectura, una fila por Magma único alcanzable.
     /// La fila k describe el nodo lógico k+1, con hijos anteriores a ese nodo.
     /// One siempre existe en el índice 0, incluso cuando no hay filas.
+    ///
+    /// ```
+    /// use emllm::{expr::{Arena, Node}, program::compile};
+    /// let mut arena = Arena::new(1);
+    /// let one = arena.one().unwrap();
+    /// let program = compile(&arena, &[one], 1).unwrap();
+    /// drop(arena);
+    /// assert!(program.pairs().is_empty());
+    /// assert_eq!(program.node_count(), 1);
+    /// assert_eq!(program.node(0), Some(Node::One));
+    /// assert_eq!(program.roots(), &[0]);
+    /// ```
     pub fn pairs(&self) -> &[[usize; 2]] {
         self.table.pairs()
     }

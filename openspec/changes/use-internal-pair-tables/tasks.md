@@ -19,7 +19,7 @@
 - [x] 4.1 Migrar `Program` y la salida del compilador a la tabla privada alcanzable, sin conservar `Vec<Node>` como almacenamiento; mantener V/E/R/D y publicar `pairs()` de solo lectura. Actualizar la documentación y doctests de campos privados al layout real; verificar los cuatro casos de estadísticas de la especificación y que One exige presupuesto uno aunque tenga cero filas.
 - [x] 4.2 Verificar remapeo con filas no alcanzables y raíces [v,One,v], esperando tabla [[0,0],[1,1]] y raíces [2,0,2]; cubrir raíces vacías/ajenas, límite insuficiente y las fixtures internas de referencia inexistente, autorreferencia y ciclo entre filas definidas en `design.md`, comprobando categorías e índices lógicos sin programas parciales.
 - [x] 4.3 Añadir la cadena compartida de 20000 niveles `ti=Magma(ti-1,ti-1)` y verificar 20000 filas, V=20001, E=40000 y D=20000 mediante compilación e inspección iterativas sin evaluación; revisar y documentar que las rutas finales del núcleo no expanden subárboles ni materializan colecciones completas de nodos etiquetados.
-- [ ] 4.4 Verificar estabilidad de pares, raíces, copias de nodos y estadísticas después de ampliar/liberar la arena; añadir doctests positivos y negativos de la vista de pares del programa, raíces y fabricación de snapshots. Ejecutarlos con diagnósticos visibles y actualizar `docs/architecture.md` para distinguir vista lógica, filas residentes e identificadores de diagnóstico.
+- [x] 4.4 Verificar estabilidad de pares, raíces, copias de nodos y estadísticas después de ampliar/liberar la arena; añadir doctests positivos y negativos de la vista de pares del programa, raíces y fabricación de snapshots. Ejecutarlos con diagnósticos visibles y actualizar `docs/architecture.md` para distinguir vista lógica, filas residentes e identificadores de diagnóstico.
 
 ## 5. Evaluacion directa y contratos numericos
 
@@ -60,3 +60,4 @@
 ## Diagnósticos revisados
 
 - 3.2: `cargo test --doc expr:: -- --show-output` pasó cuatro ejemplos. La escritura en `Arena::pairs()` falló por referencia compartida (E0594) y la fabricación de `NodeId`, por campos privados (E0451); ambos controles positivos pasaron. Los fallos no dependen de firmas desaparecidas ni de imports inválidos.
+- 4.4: `cargo test --doc program:: -- --show-output` pasó seis ejemplos: tres controles positivos y tres negativos. Escribir pares o raíces produce E0594; fabricar `Program` con raíces arbitrarias produce E0451 sobre los campos reales `table`, `roots` y `stats`.

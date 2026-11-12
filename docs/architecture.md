@@ -73,6 +73,32 @@ estable, `compile_fail` solo exige un fallo de compilación, no un código de er
 concreto. Los controles positivos y la revisión evitan aceptar fallos debidos a
 imports o preparación incorrectos.
 
+### Índices lógicos y filas residentes
+
+Arena y programa almacenan una tabla contigua de pares `usize`. One ocupa el
+índice lógico 0 sin fila; la fila k contiene los hijos del nodo k+1. Por ejemplo,
+`[[0,0],[1,1]]` representa One, Magma(0,0) y Magma(1,1). El 0 de un índice no
+introduce una constante numérica cero: el evaluador asigna 1.0 a One.
+
+`pairs()` presta filas inmutables y `nodes()` reconstruye la vista lógica por
+copia. Ambos tipos comparten estas reglas mediante `PairTable`, privada al
+crate. La arena distingue «vacía» de «One construido» con una marca perezosa;
+One sigue consumiendo una unidad del presupuesto. Un `Program` válido siempre
+incluye One y sus filas solo apuntan a nodos anteriores.
+
+El compilador selecciona la clausura alcanzable y remapea sus índices. Una
+fila de arena no tiene por qué conservar su número en el snapshot. Los errores
+estructurales señalan índices lógicos del origen; los numéricos, índices lógicos
+del programa. Resolverlos con `node(index)`, no con `pairs()[index]`: para un
+Magma de índice i, su fila es i−1. `roots()` conserva posiciones lógicas y
+duplicados. Cada snapshot y cada clon poseen sus filas y raíces; las pruebas
+de `tests/pair_tables.rs` verifican su estabilidad después de ampliar/liberar
+la arena. El constructor de tablas malformadas solo existe bajo `cfg(test)`.
+
+Esta es una representación interna dependiente de `usize`, sin formato de
+archivo ni ruta pública para importar una tabla sin validar. El coste de los
+elementos y sus exclusiones se documenta en [complejidad](complexity.md).
+
 ## Errores y presupuestos por etapa
 
 Los consumidores pueden hacer `match` sobre los tipos/variantes, sin analizar

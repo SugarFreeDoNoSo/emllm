@@ -46,6 +46,7 @@ fn logical_inspection_returns_exact_iterators_and_independent_copies() {
 
     let roots = program.roots().to_vec();
     let stats = *program.stats();
+    let pairs = program.pairs().to_vec();
     for mut copy in [arena.node(2).unwrap(), program.node(2).unwrap()] {
         let Node::Magma(ref mut left, _) = copy else {
             panic!("expected a copied Magma");
@@ -57,6 +58,8 @@ fn logical_inspection_returns_exact_iterators_and_independent_copies() {
     }
     assert_eq!(program.roots(), roots);
     assert_eq!(program.stats(), &stats);
+    assert_eq!(program.pairs(), pairs);
+    assert_eq!(arena.pairs(), pairs);
     assert_exact_nodes(arena.nodes(), &expected);
     assert_exact_nodes(program.nodes(), &expected);
 }
