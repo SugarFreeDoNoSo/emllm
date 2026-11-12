@@ -47,9 +47,14 @@ fn normalizes_before_domain_validation_without_integer_overflow() {
 #[test]
 fn synthesis_respects_construction_budget() {
     let mut arena = Arena::new(2);
+    let one = arena.one().unwrap();
+    let previous = compile(&arena, &[one], 1).unwrap();
     let result = rational(&mut arena, Rational::new(1, 2).unwrap());
     assert_eq!(result, Err(BuildError::NodeLimit { limit: 2 }));
     assert_eq!(arena.node_count(), 2);
+    assert_eq!(arena.pairs(), &[[0, 0]]);
+    assert!(arena.nodes().eq([Node::One, Node::Magma(0, 0)]));
+    assert_eq!(evaluate(&previous, 1).unwrap(), vec![1.0]);
 }
 
 #[test]

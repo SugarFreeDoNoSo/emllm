@@ -12,7 +12,7 @@
 ## 3. Arena con pares e identidad preservada
 
 - [x] 3.1 Introducir el almacenamiento privado `PairTable` en `expr` y migrar la arena e internado a pares ordenados, con One perezoso y `pairs()` de solo lectura; documentar la correspondencia fila k/nodo k+1 y verificar arena vacía, One sin filas, tabla [[0,0],[1,1]], internado repetido y operandos invertidos.
-- [ ] 3.2 Verificar presupuestos de construcción 0, 1 y límite exacto, reutilización en arena llena, errores de síntesis sin raíz parcial y procedencia de handles con índice 0 entre arenas, incluso después de liberar su origen; revisar doctests de referencias opacas y de escritura prohibida en la vista de pares de arena, con controles positivos y diagnósticos válidos.
+- [x] 3.2 Verificar presupuestos de construcción 0, 1 y límite exacto, reutilización en arena llena, errores de síntesis sin raíz parcial y procedencia de handles con índice 0 entre arenas, incluso después de liberar su origen; revisar doctests de referencias opacas y de escritura prohibida en la vista de pares de arena, con controles positivos y diagnósticos válidos.
 
 ## 4. Snapshot y compilacion de tablas
 
@@ -56,3 +56,7 @@
 - Verificación heredada y comprobada en `target/analysis/final-verification-formatted/`: `cargo check`, 29 pruebas y 12 doctests, formato, Clippy con advertencias denegadas y demostración release satisfactorios. Rust 1.92.0, `aarch64-apple-darwin`.
 - Fixtures neuronales, en orden: (V,E,R,D) = (614,1226,1,148), (676,1350,1,148), (676,1350,1,150); errores 2.426e-14, 9.104e-15, 4.829e-15 bajo 1e-6. Arena: 1.684 nodos; presupuestos: 100.000 nodos por etapa. Tolerancias escalares: 1e-9 para racionales y 1e-8 para operaciones.
 - Analizador: `mozilla/rust-code-analysis` commit `37e5d83c056c8cbf827223d5814a93c5218df1a9` (CLI 0.0.25), binario SHA-256 `8ca02c1b389db24ec87a43ed04d3e7f64c9567897c67305aed81b078bbd53351`, verificado al iniciar. Capturas `core-final` y `core-final-repeat`: cobertura 6/6 sin errores de parsing, 58 unidades, máximo local 12. La instalación y limitaciones de dependencias están documentadas en `docs/complexity.md`.
+
+## Diagnósticos revisados
+
+- 3.2: `cargo test --doc expr:: -- --show-output` pasó cuatro ejemplos. La escritura en `Arena::pairs()` falló por referencia compartida (E0594) y la fabricación de `NodeId`, por campos privados (E0451); ambos controles positivos pasaron. Los fallos no dependen de firmas desaparecidas ni de imports inválidos.

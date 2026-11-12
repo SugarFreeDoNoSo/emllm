@@ -165,6 +165,25 @@ impl Arena {
     /// nodo lógico k+1. One ocupa el índice 0 sin fila cuando se ha construido;
     /// una arena nueva todavía no contiene One. Consultar [`Self::node_count`]
     /// para distinguir ambos casos y contar el presupuesto lógico.
+    ///
+    /// ```
+    /// use emllm::expr::Arena;
+    /// let mut arena = Arena::new(2);
+    /// let one = arena.one().unwrap();
+    /// arena.magma(&one, &one).unwrap();
+    /// assert_eq!(arena.pairs(), &[[0, 0]]);
+    /// assert_eq!(arena.node_count(), 2);
+    /// ```
+    ///
+    /// La vista prestada no permite modificar operandos:
+    ///
+    /// ```compile_fail
+    /// use emllm::expr::Arena;
+    /// let mut arena = Arena::new(2);
+    /// let one = arena.one().unwrap();
+    /// arena.magma(&one, &one).unwrap();
+    /// arena.pairs()[0] = [1, 1];
+    /// ```
     pub fn pairs(&self) -> &[[usize; 2]] {
         self.table.pairs()
     }

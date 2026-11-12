@@ -10,6 +10,7 @@ fn construction_handles_keep_their_provenance_after_the_arena_is_dropped() {
     let local = receiver.one().unwrap();
     assert_eq!(foreign.index(), local.index());
     assert_ne!(foreign, local);
+    assert!(receiver.pairs().is_empty());
     drop(original);
 
     for (left, right) in [(&foreign, &local), (&local, &foreign)] {
@@ -23,6 +24,7 @@ fn construction_handles_keep_their_provenance_after_the_arena_is_dropped() {
         Err(CompileError::Roots(BuildError::ForeignReference))
     ));
     assert_eq!(receiver.node_count(), 1);
+    assert!(receiver.pairs().is_empty());
 
     let mut replacement = Arena::new(1);
     let new = replacement.one().unwrap();
@@ -32,6 +34,8 @@ fn construction_handles_keep_their_provenance_after_the_arena_is_dropped() {
         replacement.validate_roots(&[foreign]),
         Err(BuildError::ForeignReference)
     );
+    assert!(replacement.pairs().is_empty());
+    assert_eq!(replacement.node(0), Some(Node::One));
 }
 
 #[test]
