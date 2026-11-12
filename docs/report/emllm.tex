@@ -1,0 +1,277 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{lmodern}
+\usepackage[margin=24mm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,array}
+\usepackage{xcolor,tikz,fancyhdr}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\definecolor{ink}{HTML}{17324D}
+\definecolor{accent}{HTML}{087E8B}
+\definecolor{pale}{HTML}{EDF5F7}
+\usepackage[colorlinks=true,linkcolor=accent,urlcolor=accent]{hyperref}
+\hypersetup{pdftitle={EMLLM: redes en un lenguaje One/Magma},pdfauthor={Matías / SugarFreeDoNoSo}}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{ink}{EMLLM / Informe conceptual}}
+\fancyhead[R]{\small One/Magma}
+\fancyfoot[L]{\small Diseño propuesto, no resultados de ejecución}
+\fancyfoot[R]{\thepage}
+\setlength{\headheight}{14pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{7pt}
+\setlength{\emergencystretch}{2em}
+\tikzset{box/.style={draw=accent,rounded corners=3pt,fill=pale,align=center,minimum height=12mm,text width=32mm,font=\small},arr/.style={-{Latex[length=2mm]},thick,draw=ink},neuron/.style={circle,draw=accent,fill=pale,minimum size=10mm}}
+\newcommand{\M}{\operatorname{M}}
+\newcommand{\One}{\mathsf{One}}
+\newcommand{\Magma}{\mathsf{Magma}}
+
+\begin{document}
+\thispagestyle{empty}
+{\color{accent}\large NOTA TÉCNICA / 01}\par
+\vspace{10mm}
+{\color{ink}\Huge\bfseries EMLLM}\par
+\vspace{4mm}
+{\color{ink}\LARGE Redes neuronales expresadas\par únicamente con One y Magma}\par
+\vspace{6mm}
+{\large Matías / \texttt{SugarFreeDoNoSo}}\par
+\textbf{Versión documental:} 0.1.0\par
+\textbf{Estado:} propuesta de arquitectura e implementación inicial.
+
+\vspace{5mm}
+\section*{Resumen}
+El proyecto propone representar una inferencia neuronal como un programa
+simbólico cerrado con una constante, \(\One\), y una operación binaria,
+\(\Magma\). La semántica adoptada es
+\[
+  \llbracket\One\rrbracket=1,\qquad
+  \M(x,y)=e^x-\ln y,\quad y>0.
+\]
+Entradas, pesos, sesgos y operaciones de la red deben convertirse a ese
+lenguaje antes de evaluar sus salidas. El primer objetivo es construir y
+verificar esta representación en Rust, empezando por una red pequeña.
+
+\begin{center}
+\begin{tikzpicture}[node distance=8mm]
+\node[box] (data) {Entradas y pesos\\racionales};
+\node[box,right=of data] (expr) {Expansión\\One/Magma};
+\node[box,right=of expr] (dag) {DAG completo\\sin evaluar};
+\node[box,below=10mm of dag] (eval) {Evaluación\\numérica};
+\draw[arr] (data)--(expr);
+\draw[arr] (expr)--(dag);
+\draw[arr] (dag)--(eval);
+\end{tikzpicture}
+\end{center}
+
+\textbf{Decisión central.} No habrá hojas \texttt{f64} de parámetros ni
+instrucciones primitivas de suma o producto en el programa ejecutable.
+Los números de máquina pertenecen al evaluador y a la interfaz de construcción,
+no al alfabeto del programa EML.
+
+\textbf{Lectura de la evidencia.} Este informe describe una propuesta.
+El repositorio todavía no contiene el motor Rust. El prototipo citado en
+la conversación no está incorporado ni verificado aquí; sus métricas no
+se presentan como resultados de EMLLM.
+
+\vfill
+\href{https://github.com/SugarFreeDoNoSo/emllm}{github.com/SugarFreeDoNoSo/emllm}
+\newpage
+
+\section{Lenguaje y semántica}
+La gramática del programa es deliberadamente mínima:
+\[
+ T ::= \One\;\mid\;\Magma(T,T).
+\]
+La evaluación es parcial: un nodo no puede evaluarse en los reales si el
+valor de su segundo operando no es estrictamente positivo. Además, una
+implementación finita puede fallar por desbordamiento o pérdida de precisión.
+La denominación EML se usa aquí para la fórmula anterior, en base natural;
+no debe intercambiarse con una operación de base dos.
+
+\subsection{Construcciones elementales}
+Sin introducir nuevas constantes primitivas se obtienen, en aritmética real:
+\begin{align*}
+ t_1 &= \M(1,1)=e,\\
+ t_2 &= \M(t_1,1)=e^e,\\
+ t_3 &= \M(1,t_2)=e-\ln(e^e)=0.
+\end{align*}
+Los nombres \(t_i\) son referencias a expresiones, no constantes adicionales.
+El mismo nodo \(\One\) puede compartirse entre todos los usos.
+
+\begin{center}
+\begin{tikzpicture}[node distance=10mm]
+\node[box] (one) {\(\One\)\\valor: 1};
+\node[box,right=of one] (e) {\(t_1=\M(1,1)\)\\valor: \(e\)};
+\node[box,below=of e] (ee) {\(t_2=\M(t_1,1)\)\\valor: \(e^e\)};
+\node[box,left=of ee] (zero) {\(t_3=\M(1,t_2)\)\\valor: 0};
+\draw[arr] (one)--node[above,font=\scriptsize]{dos operandos}(e);
+\draw[arr] (e)--(ee);
+\draw[arr] (one)--(ee);
+\draw[arr] (one)--(zero);
+\draw[arr] (ee)--(zero);
+\end{tikzpicture}
+\end{center}
+\textit{Las flechas indican dependencias, no una ejecución durante la construcción.}
+
+\subsection{Macros y frontera numérica}
+Suma, negación y producto serán constructores que \emph{expanden} a One/Magma.
+Sus nombres pueden existir en la API, pero no como instrucciones ejecutables.
+Cada identidad utilizada debe documentar su derivación y dominio.
+
+La completitud se toma como premisa de trabajo, no como un teorema demostrado
+en este informe. Tampoco implica que todo real admita una representación
+finita exacta, ni determina un algoritmo eficiente de síntesis. La primera
+interfaz se limita a racionales acotados. Como mínimo admitirá \(p/q\), con
+\(-2\leq p\leq2\) y \(1\leq q\leq2\).
+\newpage
+
+\section{Arquitectura propuesta}
+\subsection{Construir primero; evaluar después}
+Una arena almacena nodos inmutables y referencias a sus hijos. La identidad
+es estructural: dos nodos Magma se comparten únicamente si tienen los mismos
+hijos en el mismo orden. Coincidir numéricamente no los vuelve idénticos.
+
+\begin{center}
+\begin{tikzpicture}[node distance=8mm]
+\node[box,text width=43mm] (front) {Interfaz de construcción\\racionales y dimensiones};
+\node[box,text width=43mm,right=12mm of front] (macro) {Síntesis y macros\\solo producen One/Magma};
+\node[box,text width=43mm,below=of macro] (graph) {DAG inmutable\\raíces y referencias};
+\node[box,text width=43mm,left=12mm of graph] (valid) {Validación y planificación\\dominio estructural y límites};
+\node[box,text width=43mm,below=of valid] (runtime) {Evaluador topológico\\\texttt{f64}, exp y ln};
+\node[box,text width=43mm,right=12mm of runtime] (output) {Salida o error explícito\\nodo y categoría};
+\draw[arr] (front)--(macro);
+\draw[arr] (macro)--(graph);
+\draw[arr] (graph)--(valid);
+\draw[arr] (valid)--(runtime);
+\draw[arr] (runtime)--(output);
+\end{tikzpicture}
+\end{center}
+
+Construir el grafo completo no elimina sus dependencias numéricas. Durante
+la evaluación, cada nodo sigue necesitando los valores de sus hijos. La
+separación permite inspección, compartición y futuras optimizaciones sin
+confundirlas con una aceleración ya demostrada.
+
+\subsection{Entradas y pesos también son expresiones}
+La red resultante es cerrada: no recibe valores mediante nodos Input o
+Parameter. Para otra entrada se construyen nuevas raíces, compartiendo
+subexpresiones inmutables cuando corresponda. Este coste es una consecuencia
+explícita de la elección One/Magma, no algo que deba ocultarse mediante enlaces.
+
+\subsection{Fallos observables}
+El constructor debe rechazar dimensiones y referencias inválidas, ciclos y
+presupuestos excedidos. El evaluador debe rechazar argumentos logarítmicos
+no positivos, resultados no finitos y desbordamientos. No se usarán ajustes
+silenciosos del dominio ni sustituciones por resultados convencionales.
+
+La primera versión conservará los valores intermedios para facilitar
+diagnósticos. La reutilización de temporales y la optimización algebraica
+general quedan como posibles evoluciones, no como requisitos iniciales.
+\newpage
+
+\section{Demostración neuronal y aceptación}
+Se propone una red densa 2--2--1, suficientemente pequeña para inspeccionar
+su expansión completa:
+\[
+ h=g(W_1x+b_1),\qquad y=W_oh+b_o,\qquad g(z)=e^{-z^2}.
+\]
+Esta notación describe la función; la ejecución debe utilizar exclusivamente
+su expansión One/Magma.
+
+\begin{center}
+\begin{tikzpicture}
+\node[neuron] (x1) at (0,1) {\(x_1\)};
+\node[neuron] (x2) at (0,-1) {\(x_2\)};
+\node[neuron] (h1) at (4,1) {\(h_1\)};
+\node[neuron] (h2) at (4,-1) {\(h_2\)};
+\node[neuron] (y) at (8,0) {\(y\)};
+\foreach \i in {1,2} {\foreach \j in {1,2} {\draw[arr] (x\i)--(h\j);}}
+\draw[arr] (h1)--(y); \draw[arr] (h2)--(y);
+\node[font=\small] at (0,-1.9) {Entradas};
+\node[font=\small] at (4,-1.9) {Activación gaussiana};
+\node[font=\small] at (8,-1.9) {Salida afín};
+\end{tikzpicture}
+\end{center}
+
+Las fixtures previstas fijan:
+\[
+ W_1=\begin{pmatrix}\frac12&-\frac12\\0&\frac12\end{pmatrix},\quad
+ b_1=\begin{pmatrix}0\\-\frac12\end{pmatrix},\quad
+ W_o=\begin{pmatrix}\frac12&-\frac12\end{pmatrix},\quad b_o=0.
+\]
+Se probarán las entradas \((0,0)\), \((\frac12,-\frac12)\) y
+\((-\frac12,\frac12)\). Una referencia aritmética independiente calculará
+la misma función; no formará parte del evaluador EML.
+
+\begin{center}
+\begin{tabular}{@{}p{88mm}r@{}}
+\toprule
+\textbf{Comprobación prevista} & \textbf{Error absoluto máximo}\\
+\midrule
+\(\M(1,1)\) frente a \(e\) & \(10^{-12}\)\\
+Racionales del conjunto de aceptación & \(10^{-9}\)\\
+Macros en \(\{-\frac12,0,\frac12\}\) & \(10^{-8}\)\\
+Salida de las tres fixtures neuronales & \(10^{-6}\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Estos son objetivos de aceptación, no medidas obtenidas.}
+También se comprobará que todos los nodos alcanzables son One/Magma y se
+informarán tamaño del grafo, presupuestos y error observado. Una discrepancia
+numérica debe bloquear la aceptación, no provocar una relajación silenciosa
+de las pruebas.
+\newpage
+
+\section{Alcance, evidencia y publicación}
+\subsection{Qué aporta esta primera etapa}
+El entregable de implementación previsto es un núcleo Rust con construcción,
+evaluación, síntesis acotada y demostración neuronal. Entrenamiento,
+destilación, Transformer, importación GGUF y síntesis de pesos arbitrarios
+quedan fuera de esta primera etapa. Su incorporación requerirá propuestas
+posteriores y evidencia propia.
+
+El prototipo descrito en la conversación utilizaba un MLP y un profesor
+Markoviano experimental. Conservaba Add, Mul, Neg y parámetros numéricos;
+por tanto, no constituye una demostración de una red puramente One/Magma.
+Los resultados de Python/PyTorch allí comunicados tampoco verifican una
+implementación Rust que aún no está presente en este repositorio.
+
+\subsection{Riesgos técnicos que guían la implementación}
+\begin{itemize}
+\item \textbf{Estabilidad:} exponenciales, logaritmos y cancelación pueden
+      amplificar errores. Por ejemplo, la identidad que construye cero no
+      garantiza un cero exacto en coma flotante.
+\item \textbf{Tamaño:} una expansión puede crecer mucho aunque la red sea
+      pequeña. Se usarán límites explícitos y compartición estructural.
+\item \textbf{Coste:} representar una multiplicación con EML no implica
+      que sea más barata que una instrucción nativa.
+\item \textbf{Escalado:} superar las fixtures no demuestra viabilidad para
+      un LLM. Primero se necesita una ejecución pequeña y reproducible.
+\end{itemize}
+
+\subsection{Documento versionado y release automatizada}
+La fuente de este informe vive en \texttt{docs/report/emllm.tex}. GitHub
+Actions compila el documento con LaTeX y conserva el PDF como artefacto.
+Los tags \texttt{report-v*} publican además una release con el PDF y su
+checksum SHA-256. El tag vincula cada publicación a una revisión concreta.
+
+\begin{center}
+\begin{tikzpicture}[node distance=7mm]
+\node[box,text width=29mm] (git) {Commit y tag\\\texttt{report-v*}};
+\node[box,text width=29mm,right=of git] (ci) {GitHub Actions\\LaTeX};
+\node[box,text width=29mm,right=of ci] (pdf) {PDF verificado\\SHA-256};
+\node[box,text width=29mm,right=of pdf] (rel) {GitHub\\Release};
+\draw[arr] (git)--(ci); \draw[arr] (ci)--(pdf); \draw[arr] (pdf)--(rel);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Fuentes y trazabilidad}
+La fuente normativa es la propuesta OpenSpec
+\texttt{implement-one-magma-eml}: propuesta, diseño, especificaciones de
+expresiones e inferencia, y tareas. Se encuentra en
+\href{https://github.com/SugarFreeDoNoSo/emllm/tree/main/openspec/changes/implement-one-magma-eml}{el repositorio del proyecto}.
+Este informe resume esas decisiones; no sustituye sus criterios de aceptación
+ni presenta una demostración formal de completitud.
+\end{document}

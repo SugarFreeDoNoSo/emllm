@@ -1,0 +1,89 @@
+name: Build and release report
+
+on:
+  push:
+    branches: [main]
+    tags: ['report-v*']
+    paths:
+      - 'docs/report/**'
+      - '.github/workflows/report.yml'
+  pull_request:
+    paths:
+      - 'docs/report/**'
+      - '.github/workflows/report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: report-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends latexmk texlive-latex-extra texlive-lang-spanish texlive-fonts-recommended lmodern poppler-utils
+      - name: Compile report
+        working-directory: docs/report
+        run: |
+          mkdir -p build
+          latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -outdir=build emllm.tex
+          test -s build/emllm.pdf
+          pdfinfo build/emllm.pdf
+          if grep -Eq 'Overfull \\[hv]box|LaTeX Warning:.*undefined' build/emllm.log; then
+            echo 'Layout overflow or unresolved references detected'
+            exit 1
+          fi
+          cd build
+          sha256sum emllm.pdf > emllm.pdf.sha256
+      - name: Upload PDF and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: emllm-report
+          path: |
+            docs/report/build/emllm.pdf
+            docs/report/build/emllm.pdf.sha256
+          if-no-files-found: error
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-diagnostics
+          path: docs/report/build/*.log
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/report-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: emllm-report
+          path: report
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT_TAG: ${{ github.ref_name }}
+        run: |
+          cd report
+          sha256sum --check emllm.pdf.sha256
+          if gh release view "$REPORT_TAG" > /dev/null 2>&1; then
+            echo "Release already exists; preserving its published assets."
+            exit 0
+          fi
+          gh release create "$REPORT_TAG" emllm.pdf emllm.pdf.sha256 \
+            --verify-tag \
+            --title "EMLLM: informe One/Magma ($REPORT_TAG)" \
+            --notes "Informe conceptual en español con diagramas. PDF compilado desde LaTeX por GitHub Actions. Incluye checksum SHA-256. Describe el diseño propuesto; no una implementación neuronal terminada."
