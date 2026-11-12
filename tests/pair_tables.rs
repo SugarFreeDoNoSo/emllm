@@ -1,4 +1,5 @@
 use emllm::expr::{Arena, BuildError, Node};
+use emllm::program::{CompileError, compile};
 
 #[test]
 fn arena_stores_magma_pairs_with_lazy_implicit_one() {
@@ -59,4 +60,21 @@ fn construction_budgets_count_one_even_without_a_row() {
     );
     assert!(arena.pairs().is_empty());
     assert_eq!(arena.node(0), Some(Node::One));
+}
+
+#[test]
+fn one_program_requires_a_logical_node_but_no_pair_row() {
+    let mut arena = Arena::new(1);
+    let one = arena.one().unwrap();
+    assert!(matches!(
+        compile(&arena, std::slice::from_ref(&one), 0),
+        Err(CompileError::NodeLimit { limit: 0 })
+    ));
+    let program = compile(&arena, &[one], 1).unwrap();
+    assert!(program.pairs().is_empty());
+    assert_eq!(program.node_count(), 1);
+    assert_eq!(program.roots(), &[0]);
+    assert_eq!(program.node(0), Some(Node::One));
+    assert!(program.nodes().eq([Node::One]));
+    assert_eq!(program.node(1), None);
 }
