@@ -7,8 +7,9 @@ El núcleo Rust construye DAGs cerrados, los compila en orden topológico y los
 evalúa en `f64`. Incluye síntesis racional acotada y una red 2-2-1 cuyos pesos,
 entradas, sesgos y operaciones se expanden a One/Magma antes de evaluar.
 La planificación y el seguimiento están en
-[`implement-one-magma-eml`](openspec/changes/implement-one-magma-eml/) y
-[`formalize-rust-core-contracts`](openspec/changes/formalize-rust-core-contracts/).
+[`implement-one-magma-eml`](openspec/changes/implement-one-magma-eml/),
+[`formalize-rust-core-contracts`](openspec/changes/formalize-rust-core-contracts/)
+y [`use-internal-pair-tables`](openspec/changes/use-internal-pair-tables/).
 
 ## Guías del núcleo
 
@@ -16,19 +17,35 @@ La planificación y el seguimiento están en
   `Arena → compile → Program → evaluate`, procedencia, snapshots inmutables,
   errores por etapa, aislamiento y criterios SOLID.
 - [Estadísticas y complejidad](docs/complexity.md): `Program::stats()`, modelo
-  de coste, evidencia de las fixtures y receta reproducible del analizador
-  externo, con cobertura, limitaciones y reglas para comparar revisiones.
+  de coste, payload estructural medido, evidencia de las fixtures y receta
+  reproducible del analizador externo, con cobertura, limitaciones y reglas
+  para comparar revisiones.
 
 El análisis ciclomático es opcional para desarrollar y ejecutar el motor.
 Sus cifras describen código fuente; V/E/R/D describen el DAG y los errores
 numéricos describen las fixtures. Ninguna de estas métricas, por sí sola,
 demuestra rendimiento, memoria real, precisión general o cumplimiento de SOLID.
 
-La inspección de `Arena` y `Program` devuelve `Node` por copia: `node(index)`
-produce `Option<Node>` y `nodes()` un iterador de longitud exacta. Usar
-`node_count()` para presupuestos, `.nodes()` en lugar de `.nodes().iter()` y
-`.nodes().collect::<Vec<_>>()` si el consumidor necesita una colección propia.
-Esta adaptación sustituye las firmas anteriores basadas en slices/referencias.
+## Migración de la inspección
+
+La API de inspección de 0.1.0 cambia sus firmas basadas en slices/referencias:
+`Arena::nodes()` y `Program::nodes()` devuelven
+`impl ExactSizeIterator<Item = Node> + '_`; `node(index)` devuelve `Option<Node>`
+por copia. Usar `.nodes()` en lugar de `.nodes().iter()`, `node(index)` en lugar
+de indexing y `.nodes().collect::<Vec<_>>()` en lugar de `.nodes().to_vec()`.
+`Some(&Node::One)` pasa a `Some(Node::One)`; ya no se desreferencia el resultado.
+
+`node_count()` cuenta todos los nodos lógicos para los presupuestos, mientras
+que `nodes().len()` informa los restantes de ese iterador. `pairs()` presta
+`&[[usize; 2]]` sin copia: la fila k representa el Magma de índice k+1 y One
+ocupa el índice 0 sin fila. La arena empieza vacía; crear One consume una unidad
+de presupuesto. Todo programa válido incluye One, incluso con cero filas.
+Las copias `Node` son independientes y las filas y raíces son de solo lectura.
+
+La [guía de migración](docs/architecture.md#migración-de-firmas) detalla los
+reemplazos. La [evidencia de almacenamiento](docs/complexity.md#payload-estructural-de-pares)
+compara bytes de elementos ocupados; excluye memoria auxiliar y capacidad
+reservada. Ese payload no mide memoria total, velocidad ni precisión numérica.
 
 ## Ejecutar y verificar el núcleo
 
@@ -51,8 +68,10 @@ cargo run --release --example infer
 La demostración construye los tres programas completos antes de evaluarlos.
 Usa presupuestos explícitos de 100.000 nodos para construcción, compilación y
 evaluación; informa V (nodos únicos), E (enlaces de operandos), R (posiciones de
-raíz), D (profundidad en enlaces), la referencia independiente, el error absoluto
-y la tolerancia. Termina con error si una fixture no satisface `1e-6`.
+raíz), D (profundidad en enlaces), `pair_rows`, `pair_payload_bytes` y
+`tagged_node_payload_model_bytes`, además de los tamaños de tipos, la referencia
+independiente, el error absoluto y la tolerancia. Termina con error si una
+fixture no satisface `1e-6`.
 
 Resultados locales de la demostración en release:
 
@@ -71,7 +90,7 @@ precisión o rendimiento.
 
 - `expr`: arena append-only, referencias propias de una arena, internado por
   estructura y orden de operandos, inspección y presupuesto de construcción.
-- `program`: validación y snapshot de nodos alcanzables. El recorrido es
+- `program`: validación y snapshot propietario de pares alcanzables. El recorrido es
   iterativo; las raíces conservan orden y duplicados. Construir una entrada
   nueva no modifica programas ya compilados.
 - `synth`: racionales normalizados con `abs(p)<=2` y `1<=q<=2`, suma, negación,

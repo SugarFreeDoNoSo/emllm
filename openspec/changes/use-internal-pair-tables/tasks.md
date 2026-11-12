@@ -29,7 +29,7 @@
 ## 6. Evidencia de almacenamiento y guia de migracion
 
 - [x] 6.1 Ampliar la demostración con `pair_rows`, `pair_payload_bytes` y `tagged_node_payload_model_bytes`, manteniendo estadísticas y errores; ejecutar las tres fixtures en su orden original y comprobar tolerancia 1e-6 y las fórmulas de payload usando los tamaños reales del target. Registrar en `docs/complexity.md` revisión, comando, Rust/target, tamaños de tipos y exclusiones de capacidad, metadatos, raíces, internado y temporales.
-- [ ] 6.2 Completar la guía de migración de firmas en README y `docs/architecture.md` y enlazar la evidencia de almacenamiento; verificar que todos los nombres de API y ejemplos corresponden a los entregables y que la explicación distingue One implícito, coste lógico, payload estructural, memoria total y precisión numérica, sin promesas de aceleración.
+- [x] 6.2 Completar la guía de migración de firmas en README y `docs/architecture.md` y enlazar la evidencia de almacenamiento; verificar que todos los nombres de API y ejemplos corresponden a los entregables y que la explicación distingue One implícito, coste lógico, payload estructural, memoria total y precisión numérica, sin promesas de aceleración.
 
 ## 7. Integracion y cierre de implementacion
 
@@ -62,3 +62,4 @@
 - 3.2: `cargo test --doc expr:: -- --show-output` pasó cuatro ejemplos. La escritura en `Arena::pairs()` falló por referencia compartida (E0594) y la fabricación de `NodeId`, por campos privados (E0451); ambos controles positivos pasaron. Los fallos no dependen de firmas desaparecidas ni de imports inválidos.
 - 4.4: `cargo test --doc program:: -- --show-output` pasó seis ejemplos: tres controles positivos y tres negativos. Escribir pares o raíces produce E0594; fabricar `Program` con raíces arbitrarias produce E0451 sobre los campos reales `table`, `roots` y `stats`.
 - 5.2: ocho pruebas de contratos/evaluación y tres de frontera numérica pasaron en release, junto con formato. Los fallos de dominio/desbordamiento resuelven a `node(i)` y `pairs()[i-1]`; una dependencia fallida se distingue de su raíz y del índice de arena. Ambos snapshots conservan nodos, pares, raíces y estadísticas tras llamadas intercaladas y reintentos, con tolerancia 1e-12 para e. La comparación con `fdb5880` confirma `magma_value`, `synth`, `network` y las dependencias Cargo sin cambios; en producción los `f64` siguen en evaluación, sin clamps, reconocimiento de expansiones ni referencia convencional.
+- 6.2: `RUSTDOCFLAGS='-D warnings' cargo doc --no-deps` satisfactorio; se contrastaron las diez firmas públicas de inspección con la guía, se verificaron 15 enlaces/anclas locales y se compiló/ejecutó el ejemplo Rust de arquitectura contra la biblioteca. Evidencia auxiliar en `target/analysis/pair-docs/`.
