@@ -11,7 +11,7 @@
 
 ## 3. Arena con pares e identidad preservada
 
-- [ ] 3.1 Introducir el almacenamiento privado `PairTable` en `expr` y migrar la arena e internado a pares ordenados, con One perezoso y `pairs()` de solo lectura; documentar la correspondencia fila k/nodo k+1 y verificar arena vacía, One sin filas, tabla [[0,0],[1,1]], internado repetido y operandos invertidos.
+- [x] 3.1 Introducir el almacenamiento privado `PairTable` en `expr` y migrar la arena e internado a pares ordenados, con One perezoso y `pairs()` de solo lectura; documentar la correspondencia fila k/nodo k+1 y verificar arena vacía, One sin filas, tabla [[0,0],[1,1]], internado repetido y operandos invertidos.
 - [ ] 3.2 Verificar presupuestos de construcción 0, 1 y límite exacto, reutilización en arena llena, errores de síntesis sin raíz parcial y procedencia de handles con índice 0 entre arenas, incluso después de liberar su origen; revisar doctests de referencias opacas y de escritura prohibida en la vista de pares de arena, con controles positivos y diagnósticos válidos.
 
 ## 4. Snapshot y compilacion de tablas
