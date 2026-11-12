@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="EMLLM: una propuesta para representar redes neuronales con una sola constante, One, y una operación, Magma.">
+  <meta name="theme-color" content="#102f35">
+  <title>EMLLM — Una red, dos primitivas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#informe">Saltar al informe</a>
+  <header class="nav wrap">
+    <a class="brand" href="./" aria-label="EMLLM, inicio">emllm<span> / research notes</span></a>
+    <a href="https://github.com/SugarFreeDoNoSo/emllm">Repositorio ↗</a>
+  </header>
+  <main id="informe" class="wrap">
+    <section class="hero" aria-labelledby="title">
+      <p class="eyebrow">NOTA 001 · ARQUITECTURA PROPUESTA</p>
+      <h1 id="title">Una red.<br>Dos primitivas.</h1>
+      <p class="lead">¿Cómo se ve una red neuronal cuando todo —entradas, pesos y operaciones— se expresa únicamente con <strong>One</strong> y <strong>Magma</strong>?</p>
+      <div class="links">
+        <a class="button" href="https://github.com/SugarFreeDoNoSo/emllm/releases/latest/download/emllm.pdf">Leer informe PDF <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="#idea">Explorar la idea ↓</a>
+      </div>
+      <div class="formula" aria-label="One vale uno. Magma de x, y es e elevado a x menos el logaritmo natural de y, con y mayor que cero.">
+        <span>One = 1</span><span>M(x, y) = e<sup>x</sup> − ln(y)</span><small>y &gt; 0 · base natural</small>
+      </div>
+    </section>
+
+    <section id="idea" class="section">
+      <div class="section-head"><p class="eyebrow">01 / LA IDEA</p><h2>Construir el programa.<br>Después, evaluarlo.</h2></div>
+      <p>El lenguaje tiene solo dos formas: <code>One</code> y <code>Magma(a, b)</code>. Las sumas, productos y negaciones son constructores que deben expandirse a esas formas, no instrucciones adicionales escondidas en el motor.</p>
+      <ol class="pipeline" aria-label="Etapas de la arquitectura propuesta">
+        <li><span>01</span><h3>Valores</h3><p>Entradas, pesos y sesgos racionales.</p></li>
+        <li><span>02</span><h3>Expresiones</h3><p>Síntesis completa a One/Magma.</p></li>
+        <li><span>03</span><h3>DAG</h3><p>Un grafo cerrado con subexpresiones compartidas.</p></li>
+        <li><span>04</span><h3>Evaluación</h3><p>Recorrido numérico con errores explícitos.</p></li>
+      </ol>
+      <p class="note">Construir una capa no exige evaluar la anterior. Al ejecutar el grafo, las dependencias numéricas siguen existiendo.</p>
+    </section>
+
+    <section class="section split">
+      <div><p class="eyebrow">02 / UN EJEMPLO MÍNIMO</p><h2>El cero también<br>es una expresión.</h2><p>Partiendo únicamente de One, estas identidades construyen <em>e</em>, <em>e<sup>e</sup></em> y cero en aritmética real. Los nombres t₁, t₂ y t₃ son referencias, no nuevas constantes.</p></div>
+      <div class="equations" aria-label="Construcción de cero">
+        <p><span>t₁</span> = M(1, 1) = e</p>
+        <p><span>t₂</span> = M(t₁, 1) = e<sup>e</sup></p>
+        <p><span>t₃</span> = M(1, t₂) = 0</p>
+        <small>Una identidad exacta no garantiza un resultado exacto en coma flotante. La cancelación debe verificarse.</small>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">03 / PRIMER EXPERIMENTO PROPUESTO</p>
+      <h2>Pequeño para poder comprobarlo todo.</h2>
+      <div class="split experiment">
+        <div><p>Una red densa <strong>2–2–1</strong>, con activación <strong>g(z) = exp(−z²)</strong> y salida afín. Su DAG debe incluir también las expresiones de las entradas y los pesos.</p><p>La implementación prevista es Rust con evaluación <code>f64</code>. Una referencia convencional independiente permitirá comprobar la salida de tres casos fijos.</p><p class="target">10<sup>−6</sup><span>Error absoluto máximo previsto en esas fixtures.<br>Es un criterio de aceptación, no una medida obtenida.</span></p></div>
+        <figure>
+          <svg viewBox="0 0 440 240" role="img" aria-labelledby="network-title network-desc">
+            <title id="network-title">Red neuronal de dos entradas, dos unidades ocultas y una salida</title>
+            <desc id="network-desc">Cada entrada conecta con las dos unidades ocultas, y ambas unidades conectan con la salida. Toda la red se expandirá a One/Magma.</desc>
+            <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#33757c"/></marker></defs>
+            <g stroke="#33757c" stroke-width="2" fill="none" marker-end="url(#arrow)"><path d="M 79 65 L 190 65"/><path d="M 77 78 L 193 162"/><path d="M 77 162 L 193 78"/><path d="M 79 175 L 190 175"/><path d="M 239 73 L 352 113"/><path d="M 239 167 L 352 127"/></g>
+            <g fill="#edf5ed" stroke="#33757c" stroke-width="2"><circle cx="55" cy="65" r="24"/><circle cx="55" cy="175" r="24"/><circle cx="215" cy="65" r="24"/><circle cx="215" cy="175" r="24"/><circle cx="380" cy="120" r="24"/></g>
+            <g fill="#102f35" font-family="Georgia, serif" font-size="20" text-anchor="middle"><text x="55" y="71">x₁</text><text x="55" y="181">x₂</text><text x="215" y="71">h₁</text><text x="215" y="181">h₂</text><text x="380" y="126">y</text></g>
+            <g fill="#486369" font-family="system-ui, sans-serif" font-size="12" text-anchor="middle"><text x="55" y="230">Entrada</text><text x="215" y="230">Capa oculta</text><text x="380" y="230">Salida</text></g>
+          </svg>
+          <figcaption>La notación neuronal describe la función; One/Magma describe el programa que la ejecutará.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section status">
+      <p class="eyebrow">04 / ESTADO Y FRONTERAS</p><h2>Una propuesta verificable.</h2>
+      <div class="status-grid"><div><h3>Definido</h3><p>Gramática, semántica, arquitectura, dos especificaciones y tareas de implementación en OpenSpec.</p></div><div><h3>Por implementar</h3><p>Núcleo Rust, síntesis acotada, evaluador y demostración neuronal. El motor aún no está en el repositorio.</p></div><div><h3>Por demostrar</h3><p>Estabilidad de las expansiones, coste real y escalabilidad. No se afirma una aceleración ni calidad lingüística.</p></div></div>
+      <p>La completitud del lenguaje se toma como premisa de trabajo. La prioridad es una ejecución pequeña y comprobable. Entrenamiento, Transformer e importación de modelos quedan para etapas posteriores.</p>
+    </section>
+    <section class="closing"><h2>Del concepto al contrato.</h2><p>El informe desarrolla la idea. Las especificaciones definen cómo comprobar la implementación.</p><div class="links"><a class="button" href="https://github.com/SugarFreeDoNoSo/emllm/releases/latest/download/emllm.pdf">Informe completo · PDF ↗</a><a class="text-link" href="https://github.com/SugarFreeDoNoSo/emllm/tree/main/openspec/changes/implement-one-magma-eml">Leer la propuesta ↗</a></div></section>
+  </main>
+  <footer class="wrap"><span>EMLLM · Matías / SugarFreeDoNoSo</span><a href="https://github.com/SugarFreeDoNoSo/emllm/blob/main/docs/report/emllm.tex">Fuente LaTeX ↗</a></footer>
+</body>
+</html>

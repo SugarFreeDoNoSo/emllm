@@ -105,7 +105,7 @@ El mismo nodo \(\One\) puede compartirse entre todos los usos.
 \node[box,right=of one] (e) {\(t_1=\M(1,1)\)\\valor: \(e\)};
 \node[box,below=of e] (ee) {\(t_2=\M(t_1,1)\)\\valor: \(e^e\)};
 \node[box,left=of ee] (zero) {\(t_3=\M(1,t_2)\)\\valor: 0};
-\draw[arr] (one)--node[above,font=\scriptsize]{dos operandos}(e);
+\draw[arr] (one)--(e);
 \draw[arr] (e)--(ee);
 \draw[arr] (one)--(ee);
 \draw[arr] (one)--(zero);

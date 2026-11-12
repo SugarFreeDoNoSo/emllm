@@ -10,6 +10,7 @@ One/Magma. La planificación está en
 
 ## Informe técnico
 
+- [Resumen visual en GitHub Pages](https://sugarfreedonoso.github.io/emllm/).
 - [Fuente LaTeX con diagramas TikZ](docs/report/emllm.tex).
 - [Descargar el PDF en Releases](https://github.com/SugarFreeDoNoSo/emllm/releases).
 - [Compilaciones de GitHub Actions](https://github.com/SugarFreeDoNoSo/emllm/actions/workflows/report.yml).
@@ -35,3 +36,9 @@ git push origin report-v0.1.0
 Usa un tag nuevo para cada versión y actualiza la versión documental del `.tex`.
 Los tags `report-v*` crean una release con el PDF y su checksum SHA-256 tras una
 compilación satisfactoria. Una release existente se conserva al repetir el job.
+
+## GitHub Pages
+
+El resumen estático está en `docs/site/`. El workflow `pages.yml` lo publica al
+cambiar esos archivos en `main`. La fuente de publicación de Pages debe estar
+configurada como **GitHub Actions**. El sitio no necesita dependencias ni un build.
