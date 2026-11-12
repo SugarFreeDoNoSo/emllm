@@ -432,3 +432,50 @@ doctests satisfactorios**. Los logs `without-analyzer.stdout` y
 `without-analyzer.stderr` están junto a los controles. La biblioteca estándar
 es la única dependencia del motor; la ausencia del CLI afecta solo a la
 receta externa y no impone una barrera de ejecución ni un umbral de CI.
+
+## Comparar revisiones e interpretar una extracción
+
+Ejemplo **ilustrativo**, no resultado obtenido del motor: una función contiene
+cuatro decisiones contadas bajo la convención local `M = 1 + decisiones`.
+Se extraen dos decisiones a una función auxiliar y se dejan dos en la original.
+Suponemos unidades sin solapamiento y que la llamada no añade una decisión:
+
+| Versión ilustrativa | Unidades N | Valores locales M | Máximo | Media | Suma M | Suma (M−1) |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Antes | 1 | 5 | 5 | 5 | 5 | 4 |
+| Después | 2 | 3, 3 | 3 | 3 | 6 | 4 |
+
+La media y el máximo bajan, pero se conservan las cuatro decisiones contadas;
+la suma sube por la nueva base de una unidad. Ninguna de esas cifras demuestra
+por sí sola menor complejidad global. La extracción puede mejorar nombres y
+cohesión, o introducir dependencias y fragmentación: revisar el contrato que
+justifica la nueva frontera. `sum(M_i - 1)` solo ilustra decisiones bajo esta
+convención compatible y sin solapamiento; no es una métrica universal del
+sistema ni el número suficiente de pruebas. Los agregados que incluyen hijos
+no son los `M_i` independientes de esa fórmula.
+
+Para comparar dos capturas reales:
+
+1. Exigir estados `complete`, fuentes identificadas por revisión/diff/hash y
+   JSON originales conservados. Declarar el alcance de cada lado, incluidos
+   archivos añadidos/eliminados, pruebas inline, cierres y exclusiones.
+2. Comprobar revisión del analizador, procedencia del binario, comandos y regla
+   de proyección. Si cambian gramática, convención o tratamiento de macros,
+   declarar que las cifras no son directamente comparables, o volver a medir
+   **ambas** revisiones con la misma instalación/configuración.
+3. Relacionar unidades por contrato y ubicación dentro de cada snapshot; las
+   líneas cambian al editar y un nombre puede repetirse. Informar N, funciones,
+   métodos/cierres, máximos y denominadores de medias. Identificar extracciones,
+   fusiones, movimientos y cambios de alcance antes de atribuir una variación
+   a menos decisiones. No sumar contenedores con sus descendientes.
+4. Revisar por separado la preservación de errores, presupuestos, propiedad,
+   aislamiento y tolerancias mediante las pruebas de contratos. Menos ramas
+   por eliminar una validación necesaria no sería una mejora de corrección.
+5. Evaluar SRP/OCP/LSP/ISP/DIP con los criterios de
+   [arquitectura](architecture.md), no con un límite ciclomático. Las afirmaciones
+   de tiempo o memoria real necesitan sus propias mediciones bajo condiciones
+   comparables; la precisión numérica requiere referencias y tolerancias.
+
+Esta comparación es evidencia para la revisión, sin umbrales automáticos de
+aceptación. Cambiar únicamente las entradas neuronales modifica el DAG y sus
+valores, pero no las métricas del código de una misma revisión del evaluador.
