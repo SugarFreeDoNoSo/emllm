@@ -2,7 +2,7 @@
 
 ## 1. Dependencia y revision de partida
 
-- [ ] 1.1 Confirmar que `formalize-rust-core-contracts` y su base están completados y verificados; registrar la revisión de partida, los resultados de contratos y fixtures, V/E/R/D y la procedencia del analizador de esa revisión. Si falta esa dependencia o sus comprobaciones fallan, detener este apply e informar el bloqueo sin absorber sus tareas pendientes.
+- [x] 1.1 Confirmar que `formalize-rust-core-contracts` y su base están completados y verificados; registrar la revisión de partida, los resultados de contratos y fixtures, V/E/R/D y la procedencia del analizador de esa revisión. Si falta esa dependencia o sus comprobaciones fallan, detener este apply e informar el bloqueo sin absorber sus tareas pendientes.
 
 ## 2. Migracion compilable de la inspeccion
 
@@ -41,10 +41,18 @@
 1. Aplicar este cambio después de `formalize-rust-core-contracts`, sobre la misma rama `develop`.
 2. Crear un commit por tarea completada y verificada, incluyendo sus cambios y la casilla correspondiente; completar el commit antes de avanzar a la siguiente tarea.
 3. Identificar cambio y número de tarea: `<tipo>(use-internal-pair-tables): tarea <X.Y> - <resumen>`.
-4. Publicar avances en `origin/develop` y revisar con el usuario antes del merge a `main`.
+4. Publicar avances en `origin/develop`; al terminar cada apply, crear o actualizar la PR hacia `main` y entregar su enlace para revisión antes del merge. Al iniciar este cambio ya existe la PR #2 creada por el usuario.
 5. El cambio intermedio de inspección de la sección 2 no acredita por sí solo el almacenamiento final: completar la migración de ambas tablas y la evaluación antes de declarar cumplida la capacidad.
 
 ## Workflow follow-up
 
 - Revisar la implementación y su evidencia con el usuario antes de archivar.
 - Archivar los cambios en orden de dependencia; el archivo no forma parte de las tareas de implementación anteriores.
+
+## Evidencia de partida (1.1)
+
+- Revisión de partida: `28d487161091c292d6aa828aa0387be9a28ac6ea`, publicada en `develop`, árbol limpio. `formalize-rust-core-contracts`: 23/23 y `implement-one-magma-eml`: 16/16, ambos `all_done` y validados estrictamente al cerrarlos.
+- El código, pruebas y ejemplos coinciden con `fdb58804c1a9f40a14e56116907dd950c3184f5c`. Se comprobaron los ocho hashes de fuentes/configuración de `target/analysis/core-final/sources.sha256.json` y la ausencia de diferencias posteriores en esas áreas.
+- Verificación heredada y comprobada en `target/analysis/final-verification-formatted/`: `cargo check`, 29 pruebas y 12 doctests, formato, Clippy con advertencias denegadas y demostración release satisfactorios. Rust 1.92.0, `aarch64-apple-darwin`.
+- Fixtures neuronales, en orden: (V,E,R,D) = (614,1226,1,148), (676,1350,1,148), (676,1350,1,150); errores 2.426e-14, 9.104e-15, 4.829e-15 bajo 1e-6. Arena: 1.684 nodos; presupuestos: 100.000 nodos por etapa. Tolerancias escalares: 1e-9 para racionales y 1e-8 para operaciones.
+- Analizador: `mozilla/rust-code-analysis` commit `37e5d83c056c8cbf827223d5814a93c5218df1a9` (CLI 0.0.25), binario SHA-256 `8ca02c1b389db24ec87a43ed04d3e7f64c9567897c67305aed81b078bbd53351`, verificado al iniciar. Capturas `core-final` y `core-final-repeat`: cobertura 6/6 sin errores de parsing, 58 unidades, máximo local 12. La instalación y limitaciones de dependencias están documentadas en `docs/complexity.md`.
