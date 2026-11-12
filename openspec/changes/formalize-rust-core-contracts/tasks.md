@@ -23,7 +23,7 @@
 
 ## 4. Inspeccion y reporte del programa
 
-- [ ] 4.1 Calcular y exponer las estadísticas estructurales V, E, R y D al compilar; verificar los valores exactos de One, Magma(One,One), Magma(t,t) y raíces [t,t] establecidos en `eml-complexity-reporting`.
+- [x] 4.1 Calcular y exponer las estadísticas estructurales V, E, R y D al compilar; verificar los valores exactos de One, Magma(One,One), Magma(t,t) y raíces [t,t] establecidos en `eml-complexity-reporting`.
 - [ ] 4.2 Verificar exclusión de nodos no alcanzables y estabilidad de estadísticas tras ampliar/liberar la arena o fallar una evaluación; añadir además un caso de cadena profunda dentro del presupuesto que complete compilación e inspección sin depender de recursión ni de evaluación numérica.
 - [ ] 4.3 Ampliar la demostración neuronal para informar estadísticas por programa junto a presupuestos y errores observados; ejecutar las tres fixtures originales y comprobar que conservan su tolerancia de 1e-6 y el orden de sus salidas.
 - [ ] 4.4 Documentar la API de estadísticas e iniciar `docs/complexity.md` con sus definiciones y el modelo O(V + E + R); verificar que los ejemplos coinciden con los casos de prueba y distinguen almacenamiento modelado, medidas reales y alcance de las fixtures.

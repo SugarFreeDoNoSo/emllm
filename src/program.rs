@@ -59,9 +59,28 @@ pub use crate::expr::Node;
 pub struct Program {
     nodes: Vec<Node>,
     roots: Vec<usize>,
+    stats: ProgramStats,
+}
+
+/// Estadísticas de la clausura alcanzable, calculadas al compilar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProgramStats {
+    /// V: nodos únicos.
+    pub nodes: usize,
+    /// E: posiciones de operando, incluso si repiten el mismo hijo.
+    pub edges: usize,
+    /// R: posiciones de raíz, incluidos duplicados.
+    pub roots: usize,
+    /// D: profundidad máxima en enlaces; One tiene profundidad cero.
+    pub depth: usize,
 }
 
 impl Program {
+    /// Consulta constante de estadísticas, sin evaluación ni recorrido adicional.
+    pub fn stats(&self) -> &ProgramStats {
+        &self.stats
+    }
+
     /// Vista inmutable en orden de evaluación. Sus posiciones identifican nodos
     /// únicamente dentro de este snapshot, incluidos los operandos de Magma.
     pub fn nodes(&self) -> &[Node] {
@@ -130,6 +149,8 @@ fn compile_nodes(
     let mut states = HashMap::new();
     let mut remapped = HashMap::new();
     let mut nodes = Vec::new();
+    let mut depths: Vec<usize> = Vec::new();
+    let mut edges = 0;
     let mut stack = Vec::new();
 
     for &root in roots {
@@ -139,12 +160,18 @@ fn compile_nodes(
                 .get(index)
                 .ok_or(CompileError::InvalidReference { index })?;
             if exiting {
-                let compiled = match node {
-                    Node::One => Node::One,
-                    Node::Magma(left, right) => Node::Magma(remapped[&left], remapped[&right]),
+                let (compiled, depth) = match node {
+                    Node::One => (Node::One, 0),
+                    Node::Magma(left, right) => {
+                        let left = remapped[&left];
+                        let right = remapped[&right];
+                        edges += 2;
+                        (Node::Magma(left, right), 1 + depths[left].max(depths[right]))
+                    }
                 };
                 remapped.insert(index, nodes.len());
                 nodes.push(compiled);
+                depths.push(depth);
                 states.insert(index, 2);
                 continue;
             }
@@ -166,6 +193,12 @@ fn compile_nodes(
     }
 
     Ok(Program {
+        stats: ProgramStats {
+            nodes: nodes.len(),
+            edges,
+            roots: roots.len(),
+            depth: depths.into_iter().max().unwrap_or(0),
+        },
         nodes,
         roots: roots.iter().map(|root| remapped[root]).collect(),
     })
