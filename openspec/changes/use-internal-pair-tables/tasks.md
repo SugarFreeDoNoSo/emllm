@@ -28,7 +28,7 @@
 
 ## 6. Evidencia de almacenamiento y guia de migracion
 
-- [ ] 6.1 Ampliar la demostración con `pair_rows`, `pair_payload_bytes` y `tagged_node_payload_model_bytes`, manteniendo estadísticas y errores; ejecutar las tres fixtures en su orden original y comprobar tolerancia 1e-6 y las fórmulas de payload usando los tamaños reales del target. Registrar en `docs/complexity.md` revisión, comando, Rust/target, tamaños de tipos y exclusiones de capacidad, metadatos, raíces, internado y temporales.
+- [x] 6.1 Ampliar la demostración con `pair_rows`, `pair_payload_bytes` y `tagged_node_payload_model_bytes`, manteniendo estadísticas y errores; ejecutar las tres fixtures en su orden original y comprobar tolerancia 1e-6 y las fórmulas de payload usando los tamaños reales del target. Registrar en `docs/complexity.md` revisión, comando, Rust/target, tamaños de tipos y exclusiones de capacidad, metadatos, raíces, internado y temporales.
 - [ ] 6.2 Completar la guía de migración de firmas en README y `docs/architecture.md` y enlazar la evidencia de almacenamiento; verificar que todos los nombres de API y ejemplos corresponden a los entregables y que la explicación distingue One implícito, coste lógico, payload estructural, memoria total y precisión numérica, sin promesas de aceleración.
 
 ## 7. Integracion y cierre de implementacion

@@ -96,6 +96,52 @@ frente a la referencia independiente. Son observaciones de estas tres fixtures,
 no una cota global de precisión ni un benchmark de rendimiento. Los errores de
 dominio y desbordamiento siguen siendo posibles en otros programas válidos.
 
+## Payload estructural de pares
+
+La demostración imprime los tamaños reales del target y, por programa,
+`pair_rows`, `pair_payload_bytes` y `tagged_node_payload_model_bytes` junto a
+V/E/R/D, presupuestos, salidas y errores. Con M filas, V nodos lógicos y
+W=`size_of::<usize>()`, las fórmulas son:
+
+- `pair_rows = program.pairs().len() = M`.
+- `pair_payload_bytes = M * size_of::<[usize; 2]>() = 2 * M * W`.
+- `tagged_node_payload_model_bytes = V * size_of::<Node>()`.
+- En un programa validado, `V=M+1` y `E=2M`; One no tiene fila, pero cuenta
+  para los presupuestos de las tres etapas. Un programa One tiene cero bytes
+  de elementos de pares, además de sus raíces, metadatos y valores temporales.
+
+El modelo etiquetado usa el enum `Node` que sigue disponible como vista lógica;
+no materializa un vector de esos valores. `size_of` incluye el padding propio
+del elemento. El tamaño del enum se consulta en cada compilación: no es un
+formato binario ni una garantía de layout entre targets o versiones de Rust.
+
+Medición del 2026-11-12 mediante `cargo run --release --example infer`, Rust
+1.92.0 (`ded5c06cf`), Cargo 1.92.0 y target nativo `aarch64-apple-darwin`.
+Fuentes de partida: `073e34a73d17a49e1d33cc7460ba5ee53ed71734` más la ampliación
+de `examples/infer.rs` de la tarea 6.1. El ejemplo medido tiene SHA-256
+`099201e007230228bac81651e5897f14386313a8f3a4f96b33ac5585bbfe6acd`.
+Los tamaños observados fueron `usize`=8, `[usize; 2]`=16 y `Node`=24 bytes.
+
+| Entrada, en orden de ejecución | V | M (`pair_rows`) | `pair_payload_bytes` | `tagged_node_payload_model_bytes` | Error absoluto |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `[0,0]` | 614 | 613 | 9808 | 14736 | 2.426e-14 |
+| `[1/2,-1/2]` | 676 | 675 | 10800 | 16224 | 9.104e-15 |
+| `[-1/2,1/2]` | 676 | 675 | 10800 | 16224 | 4.829e-15 |
+
+Se verificaron las fórmulas con esos tamaños, el orden de las tres fixtures y
+las tuplas V/E/R/D de la base. La arena conserva 1.684 nodos y los presupuestos
+siguen siendo 100.000 por etapa. Los tres errores cumplen `1e-6`. La captura
+`target/analysis/pair-payload/` conserva stdout/stderr, comandos, versiones,
+revisión, diff, fuentes originales y sus hashes; sus archivos son evidencia
+local de desarrollo ignorada por Git.
+
+Estas cifras describen únicamente los elementos estructurales ocupados.
+Excluyen capacidad sobrante de vectores, cabeceras, marca de One, tokens de
+identidad, tablas de internado, raíces, estadísticas, temporales de compilación
+y evaluación y sobrecostes del asignador. No son RSS ni heap total del proceso.
+La reducción de este payload no mide velocidad ni precisión: esta última se
+verifica por separado frente a referencias y tolerancias, manteniendo `f64`.
+
 ## Analizador externo y procedencia
 
 Se seleccionó `rust-code-analysis-cli` del repositorio
