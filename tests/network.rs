@@ -1,7 +1,11 @@
+use emllm::eval::evaluate;
 use emllm::expr::{Arena, Node};
 use emllm::network::{Network221, NetworkError};
 use emllm::program::compile;
 use emllm::synth::Rational;
+
+#[path = "../examples/support/reference.rs"]
+mod reference;
 
 fn inputs() -> [[Rational; 2]; 3] {
     let zero = Rational::new(0, 1).unwrap();
@@ -41,6 +45,37 @@ fn constructs_all_fixture_roots_without_evaluation() {
         match node {
             Node::One => {}
             Node::Magma(left, right) => assert!(*left < index && *right < index),
+        }
+    }
+}
+
+#[test]
+fn all_three_fixtures_match_the_independent_reference() {
+    let network = Network221::fixture();
+    for (input, reference_input) in inputs().iter().zip(reference::INPUTS) {
+        let mut arena = Arena::new(100_000);
+        let root = network.build(&mut arena, input).unwrap();
+        let program = compile(&arena, &[root], 100_000).unwrap();
+        let actual = evaluate(&program, 100_000).unwrap()[0];
+        let expected = reference::infer(reference_input);
+        let error = (actual - expected).abs();
+        eprintln!(
+            "input={reference_input:?}, actual={actual:.15}, reference={expected:.15}, abs_error={error:.3e}, nodes={}",
+            program.nodes().len()
+        );
+        assert!(error <= 1e-6, "input={reference_input:?}, error={error}");
+        assert_eq!(
+            program
+                .nodes()
+                .iter()
+                .filter(|node| **node == Node::One)
+                .count(),
+            1
+        );
+        for (index, node) in program.nodes().iter().enumerate() {
+            if let Node::Magma(left, right) = node {
+                assert!(*left < index && *right < index);
+            }
         }
     }
 }
