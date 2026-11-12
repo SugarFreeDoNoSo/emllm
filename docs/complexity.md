@@ -619,3 +619,80 @@ Clippy; no se presenta como un resultado satisfactorio. En 6.2 también pasaron
 la documentación con advertencias denegadas, el ejemplo de arquitectura y
 15 enlaces/anclas locales. Estas comprobaciones son evidencia de desarrollo,
 sin medir memoria total ni tiempo de ejecución.
+
+## Comparación ciclomática de tablas de pares (7.2)
+
+Se ejecutaron las recetas de captura y proyección anteriores con
+`RUN=target/analysis/pair-final` y `RUN=target/analysis/pair-final-repeat` sobre
+`32dd4fd85678c65b659ef78d8857c54fd2904f0c`, árbol limpio. Se reutilizó el binario
+del analizador `37e5d83c056c8cbf827223d5814a93c5218df1a9`, verificando su recibo
+Cargo y SHA-256 `8ca02c1b389db24ec87a43ed04d3e7f64c9567897c67305aed81b078bbd53351`.
+Toolchain: Rust/Cargo 1.92.0, `aarch64-apple-darwin`.
+
+Ambas capturas tienen estado **`complete`**, cobertura **6/6**, sin errores de
+parsing, omisiones ni duplicados. Coinciden los ocho hashes de fuentes y
+configuración, los JSON originales comparados como datos, las 74 identidades
+de unidad y sus valores. Se comprobaron también rangos contra las fuentes
+capturadas e identidades jerárquicas únicas. No hay mediciones ausentes o
+incompletas en estos dos reportes; `lib.rs` contiene cero funciones en el alcance,
+por lo que carece de máximo y media, no de cobertura.
+
+La base es `core-final`, repetida en `core-final-repeat`, cuyos ocho hashes
+coinciden con la dependencia verificada `fdb5880`. Su captura identifica
+`e1d2299` más el diff de formato conservado. Ambos lados utilizan el mismo
+alcance `src/**/*.rs`, analizador, comandos y proyección. Incluyen pruebas
+inline; excluyen `tests/`, `examples/`, doctests y expansión de macros.
+
+| Archivo final | Funciones/métodos | Cierres | Pruebas inline incluidas | Máximo local | Suma local | Media por unidad |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `src/eval.rs` | 6 | 2 | 3 | 6 | 19 | 2.375 |
+| `src/expr.rs` | 27 | 1 | 5 | 5 | 53 | 1.8929 |
+| `src/lib.rs` | 0 | 0 | 0 | — | 0 | — |
+| `src/network.rs` | 8 | 0 | 0 | 7 | 26 | 3.25 |
+| `src/program.rs` | 13 | 3 | 3 | 12 | 38 | 2.375 |
+| `src/synth.rs` | 14 | 0 | 0 | 11 | 61 | 4.3571 |
+| **Alcance completo** | **68** | **6** | **11** | **12** | **197** | **2.6622** |
+
+Las 11 funciones `#[test]` son un subconjunto de las 68, no unidades adicionales.
+También se incluyen el helper `PairTable::from_test_pairs` bajo `cfg(test)` y
+el cierre lector de la fixture malformada; no se atribuyen a producción. El
+analizador no selecciona configuración como rustc: el cierre dentro de
+`debug_assert!` en `PairTable::push` no se exporta como unidad independiente.
+Se mantienen las limitaciones sobre macros de la receta original.
+
+La comparación relacionó **57 unidades**, incluida la prueba profunda renombrada;
+52 conservan su valor local y cinco lo cambian. Se retiró `Arena::intern` y se
+añadieron 17 unidades: ocho de `PairTable` (siete métodos y un cierre), cinco
+métodos de arena, dos métodos de programa y dos cierres lectores. Los helpers
+de presupuesto/handle y las rutas `one`/`magma` redistribuyen el internado; no
+son una eliminación de sus comprobaciones.
+
+| Unidad / contrato | Local en base | Local final | Interpretación |
+| --- | ---: | ---: | --- |
+| `evaluate` | 6 | 4 | Recorre pares directamente, sin los brazos de One/Magma |
+| `magma_value` | 6 | 6 | Semántica y comprobaciones numéricas conservadas |
+| `Arena::one` | 1 | 3 | Presencia perezosa y presupuesto explícitos |
+| `Arena::magma` | 3 | 5 | Búsqueda del par y presupuesto antes de insertar |
+| `compile_nodes` | 12 | 12 | Recorrido y validación iterativos conservados |
+| `rejects_malformed_graphs` | 1 | 2 | Bucle sobre las tres fixtures de pares |
+| Prueba profunda renombrada | 5 | 4 | Dos hijos compartidos en cada nivel; misma profundidad |
+
+El máximo final es 12 en `src/program.rs:185-247` (`compile_nodes`); su suma
+exportada 13 incluye el cierre de 1 y no se suma otra vez a este. Del mismo
+modo, `PairTable::nodes` exporta 2: su local es 1 más un cierre independiente
+de 1. La tabla excluye contenedores y resta los hijos inmediatos una sola vez.
+
+En conjunto N pasa de 58 a 74, la suma local de 177 a 197 y la media de
+177/58≈3.0517 a 197/74≈2.6622; el máximo sigue en 12. El denominador y las
+fronteras de funciones cambiaron, así que la media menor no demuestra una
+reducción general de complejidad, tiempo o memoria. No se introducen umbrales.
+Errores, presupuestos, propiedad y precisión se acreditan con las verificaciones
+de contratos y fixtures de la sección anterior.
+
+Cada captura conserva fuentes, metadatos, recibo de instalación, hashes, logs,
+recetas ejecutadas y JSON originales. `pair-final/unit-comparison.json` conserva
+las identidades completas de ambos lados (archivo, padres, nombre, tipo y
+líneas), añadidas/retiradas y deltas locales;
+`pair-final/comparison-summary.json` registra los denominadores y agregados.
+Son archivos locales bajo `target/analysis/`; este reporte publica sus resultados
+y el procedimiento, manteniendo el analizador fuera de las dependencias del motor.
