@@ -2,7 +2,7 @@
 
 ## 1. Dependencia de implementacion
 
-- [ ] 1.1 Confirmar que `implement-one-magma-eml` está implementado y satisface sus especificaciones; verificar la presencia del crate, registrar su revisión y los resultados de sus comprobaciones y fixtures. Si la base falta o falla, detener la aplicación de este cambio e informar esa dependencia.
+- [x] 1.1 Confirmar que `implement-one-magma-eml` está implementado y satisface sus especificaciones; verificar la presencia del crate, registrar su revisión y los resultados de sus comprobaciones y fixtures. Si la base falta o falla, detener la aplicación de este cambio e informar esa dependencia.
 
 ## 2. Referencias y frontera estructural
 
@@ -48,3 +48,11 @@
 3. Crear un commit por tarea completada y verificada, incluyendo sus cambios y la actualización de su casilla en `tasks.md`. Completar ese commit antes de avanzar a la siguiente tarea.
 4. Identificar el cambio y el número de tarea en cada mensaje de commit; formato de referencia: `<tipo>(<cambio>): tarea <X.Y> - <resumen>`.
 5. Publicar los avances en `origin/develop` y revisar con el usuario antes de realizar el merge a `main`.
+
+## Evidencia de la dependencia (1.1)
+
+- Base: `f667704143f9539803f816010b9d53764623393d`, publicada en `develop`, árbol limpio al iniciar este cambio. `implement-one-magma-eml`: 16/16 y estado `all_done`; validación OpenSpec estricta satisfactoria.
+- Crate `emllm` 0.1.0, edición 2024, biblioteca estándar, con `expr`, `synth`, `program`, `eval` y `network`, pruebas y `examples/infer.rs`.
+- Comprobaciones ejecutadas sobre el código de esa revisión: `cargo check`, `cargo test --release` (22 pruebas y 1 doctest), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` y `cargo run --release --example infer`, todas satisfactorias. Los commits finales de la base solo actualizaron README y seguimiento.
+- Entorno: Rust 1.92.0, `aarch64-apple-darwin`. Errores máximos escalares: racionales `5.551e-17` (límite `1e-9`) y operaciones/composiciones `2.220e-14` (límite `1e-8`).
+- Red: entradas `[0,0]`, `[1/2,-1/2]`, `[-1/2,1/2]`; nodos alcanzables 614, 676, 676; errores `2.426e-14`, `9.104e-15`, `4.829e-15`, todos bajo `1e-6`. Arena compartida: 1.684 nodos. Evidencia local, sin garantía global de precisión.
