@@ -261,3 +261,127 @@ y sin cambios en `src`. Se verificaron los ocho hashes de fuentes/configuración
 la cobertura 6/6 y los rangos de los 82 espacios JSON contra sus fuentes
 capturadas; sus identidades jerárquicas fueron únicas. «Espacios» incluye
 contenedores y no equivale al número de funciones.
+
+## Lectura por unidad y repetición
+
+En esta revisión del analizador, `kind: function` representa tanto funciones y
+métodos como cierres. `nom` permite distinguirlos; los cierres se nombran
+`<anonymous>` y necesitan archivo, padres y líneas para identificarse. Los
+espacios `unit`, `impl` y `trait` son contenedores, no funciones adicionales.
+
+`metrics.cyclomatic.sum` **incluye los subespacios**. Para obtener el valor local
+de un espacio se resta la suma exportada de sus hijos inmediatos, cada uno una
+vez. Esta es una proyección aritmética del JSON, no otro analizador de Rust.
+Por ejemplo, `compile_nodes` exporta 13, que incluye un cierre de 1: su valor
+local es 12. Sumar 13 y 1 contaría el cierre dos veces. Los promedios exportados
+por contenedor incluyen también espacios contenedores en el denominador;
+no son automáticamente promedios por función.
+
+Para generar una tabla derivada sin alterar los JSON originales:
+
+```sh
+export RUN="${RUN:-target/analysis/core-initial}"
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+out = Path(os.environ['RUN'])
+coverage = json.loads((out / 'coverage.json').read_text())
+if coverage['state'] != 'complete':
+    raise SystemExit('No report: ' + coverage['state'])
+rows = []
+
+def walk(file, space, parents=()):
+    identity = [space[k] for k in ('kind', 'name', 'start_line', 'end_line')]
+    children = space['spaces']
+    cc = space['metrics']['cyclomatic']['sum']
+    local = cc - sum(c['metrics']['cyclomatic']['sum'] for c in children)
+    if space['kind'] == 'function':
+        closures = space['metrics']['nom']['closures'] - sum(
+            c['metrics']['nom']['closures'] for c in children)
+        rows.append(dict(file=file, parents=list(parents), identity=identity,
+                         category='closure' if closures == 1 else 'function/method',
+                         local=local, exported_sum=cc))
+    for child in children:
+        walk(file, child, parents + (identity,))
+
+for path in sorted((out / 'cc').rglob('*.json')):
+    data = json.loads(path.read_text())
+    walk(data['name'], data)
+summary = {}
+for file in coverage['expected']:
+    values = [r['local'] for r in rows if r['file'] == file]
+    summary[file] = dict(units=len(values), maximum=max(values, default=None),
+                         local_sum=sum(values),
+                         mean=sum(values) / len(values) if values else None)
+(out / 'units.json').write_text(json.dumps(rows, indent=2) + '\n')
+(out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+print(json.dumps(summary, indent=2))
+PY
+```
+
+Repetir la captura con `RUN=target/analysis/core-repeat` y ejecutar también esta
+proyección con ese `RUN`. Antes de comparar `units.json`, exigir igualdad de
+`sources.sha256.json`, revisión y hash del analizador, alcance y cobertura
+completa en ambas ejecuciones. Comparar identidades y valores, no orden de
+archivos generado en paralelo ni marcas de tiempo. Una nueva revisión Git que
+solo cambie documentación puede tener las mismas fuentes; conservar ambas
+revisiones en los metadatos, sin confundirlas.
+
+### Convención y límites de lectura
+
+- Cada espacio parte de 1; la regla Rust incrementa por nodos `if`, `for`,
+  `while`, `loop`, brazos de `match`, expresión `?`, `&&` y `||`.
+  Es una convención sintáctica de esa revisión, no un CFG del compilador.
+  Por ejemplo, el token `for` de `impl Trait for Type` afecta al contenedor.
+- Las funciones de los módulos `#[cfg(test)]` inline se analizan aunque una
+  compilación de producción las excluya. Se mantienen en este alcance y se
+  identifican en el reporte; no se deduce «producción» del nombre del archivo.
+- Los doctests en comentarios no son unidades ejecutables del análisis.
+  `tests/` y `examples/` requieren capturas adicionales con alcance declarado.
+- No hay expansión de `derive`, macros declarativas/procedurales ni selección
+  de `cfg` como en rustc. Los tokens visibles en una macro pueden influir en
+  la métrica, pero no equivalen a medir su expansión; funciones o cierres
+  dentro de token trees pueden no aparecer como unidades independientes.
+- La cobertura completa significa que todos los archivos declarados emitieron
+  JSON sin errores de parsing detectados. No significa cobertura de todo el
+  código ejecutable que produciría rustc, ni determina pruebas suficientes.
+
+Reglas consultadas en el commit fijado:
+[`cyclomatic.rs`](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/metrics/cyclomatic.rs),
+[`spaces.rs`](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/spaces.rs),
+[`checker.rs`](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/checker.rs)
+y [`getter.rs`](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/getter.rs).
+
+### Primer reporte verificado
+
+`core-initial` (HEAD `69b2d77`) y `core-repeat` (HEAD `0b29531`) conservaron los
+mismos ocho hashes de fuentes/configuración y el mismo binario. Ambos dieron
+cobertura 6/6, sin errores de parsing; coincidieron los valores de las 58
+unidades y todos los JSON al compararlos como datos. Las revisiones completas,
+cambios documentales y fuentes están registrados en cada captura.
+
+| Archivo | Funciones/métodos | Cierres | Pruebas inline incluidas | Máximo local | Suma local | Media por unidad |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `src/eval.rs` | 6 | 2 | 3 | 6 | 21 | 2.625 |
+| `src/expr.rs` | 16 | 0 | 5 | 5 | 35 | 2.1875 |
+| `src/lib.rs` | 0 | 0 | 0 | — | 0 | — |
+| `src/network.rs` | 8 | 0 | 0 | 7 | 26 | 3.25 |
+| `src/program.rs` | 11 | 1 | 3 | 12 | 34 | 2.8333 |
+| `src/synth.rs` | 14 | 0 | 0 | 11 | 61 | 4.3571 |
+| **Alcance completo** | **55** | **3** | **11** | **12** | **177** | **3.0517** |
+
+Las pruebas inline son un subconjunto de las 55 funciones, no unidades para
+añadir otra vez. Se identifican en los módulos de prueba de `eval.rs:143`,
+`expr.rs:167` y `program.rs:220` del snapshot. Los tres cierres pertenecen a
+`evaluate`, `magma_value` y `compile_nodes`. Los 24 espacios restantes del JSON
+son seis archivos y 18 bloques `impl`; se excluyen de este denominador de 58.
+`lib.rs` fue analizado correctamente y no contiene funciones en este alcance:
+su suma vacía no es una medición ausente ni un máximo igual a cero.
+
+El máximo local observado es **12**, en `src/program.rs:157-218`,
+`compile_nodes`; `mul` (`synth.rs:137-149`) y `rational`
+(`synth.rs:152-172`) tienen 11. La suma 177 y la media 177/58 son resúmenes de
+estas unidades bajo la convención anterior, no complejidad universal del
+sistema, umbrales de calidad ni evidencia de rendimiento. Los detalles
+reproducibles quedan en `units.json`, `summary.json` y `cc/` de cada captura.
