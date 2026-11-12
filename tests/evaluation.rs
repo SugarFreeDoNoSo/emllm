@@ -33,6 +33,8 @@ fn numerical_failures_report_the_compiled_node() {
         (overflow, EvalErrorKind::ExponentialOverflow),
     ] {
         let program = compile(&arena, &[one.clone(), root], 10).unwrap();
+        let nodes = program.nodes().to_vec();
+        let roots = program.roots().to_vec();
         assert_eq!(
             evaluate(&program, 10),
             Err(EvalError {
@@ -40,6 +42,9 @@ fn numerical_failures_report_the_compiled_node() {
                 node: Some(program.roots()[1]),
             })
         );
+        assert_eq!(program.nodes(), nodes);
+        assert_eq!(program.roots(), roots);
+        assert_eq!(program.node(roots[1]), Some(&nodes[roots[1]]));
     }
 }
 
