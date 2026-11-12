@@ -24,8 +24,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::expr::Node;
-use crate::program::Program;
+use crate::program::{Node, Program};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EvalErrorKind {

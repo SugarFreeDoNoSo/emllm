@@ -45,6 +45,15 @@
 //! cambiar nodos o raíces. Los ejemplos de [`program::Program`] verifican tanto
 //! su uso válido como el rechazo de intentos externos de invalidarlo.
 //!
+//! # Responsabilidades y dependencias
+//!
+//! `expr` define el lenguaje cerrado y protege la arena; `synth` compone ese
+//! lenguaje; `program` valida y posee la vista ejecutable; `eval` consume esa
+//! vista; `network` compone síntesis y expresiones. Los módulos de construcción
+//! no ejecutan el evaluador. La referencia convencional solo existe en pruebas
+//! y demostración. No hay dependencias de ejecución externas a la biblioteca
+//! estándar, configuración global mutable ni E/S en estas etapas del núcleo.
+//!
 //! # Recursos y garantías
 //!
 //! El presupuesto de construcción cuenta nodos únicos de toda la arena.

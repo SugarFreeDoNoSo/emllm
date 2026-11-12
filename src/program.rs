@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-use crate::expr::{Arena, BuildError, Node, NodeId};
+use crate::expr::{Arena, BuildError, NodeId};
+
+/// Forma cerrada de los nodos que expone la inspección del programa.
+pub use crate::expr::Node;
 
 /// Snapshot cerrado cuyos hijos preceden a sus padres en `nodes()`.
 ///
