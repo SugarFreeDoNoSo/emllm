@@ -137,3 +137,127 @@ El JSON y los logs de esta comprobación están en
 [exportación de métricas](https://mozilla.github.io/rust-code-analysis/commands/metrics.html),
 [búsqueda de errores](https://mozilla.github.io/rust-code-analysis/commands/nodes.html)
 y [fuentes fijadas del CLI](https://github.com/mozilla/rust-code-analysis/tree/37e5d83c056c8cbf827223d5814a93c5218df1a9/rust-code-analysis-cli).
+
+## Receta de captura y exportación
+
+Requiere Python 3, Git y la instalación anterior. Ejecutar desde la raíz sin
+editar fuentes durante la captura. Elegir un `RUN` nuevo en cada ejecución:
+el procedimiento rechaza directorios existentes para no mezclar resultados.
+El alcance es **todos los `.rs` bajo `src`**, incluidas pruebas inline, sin
+`tests/`, `examples/` ni expansión de macros. Los archivos de `src` registrados
+en HEAD también se esperan: una ausencia accidental no reduce el inventario.
+Una eliminación intencional requiere una nueva revisión o declarar otro alcance.
+
+La copia `snapshot/src/` es la entrada efectiva del CLI. Sus rutas relativas
+mantienen la correspondencia de `name`, líneas y unidades con los JSON; se
+guardan todos sus bytes y hashes, incluidas fuentes nuevas o ignoradas por Git.
+`changes.patch` conserva cambios registrados respecto de HEAD, y `git-status`
+identifica además archivos sin seguimiento. Los archivos adicionales fuera de
+`src` aparecen en el estado, pero no forman parte del alcance analizado.
+
+```sh
+export RUN="${RUN:-target/analysis/core-initial}"
+export RCA="${RCA:-target/analysis/tools/rca-37e5d83/bin/rust-code-analysis-cli}"
+python3 - <<'PY'
+import hashlib, json, os, shutil, subprocess, sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+root = Path.cwd()
+out = Path(os.environ['RUN']).resolve()
+out.mkdir(parents=True, exist_ok=False)
+cli = Path(os.environ['RCA']).resolve()
+meta = {
+    'created_utc': datetime.now(timezone.utc).isoformat(),
+    'scope': 'src/**/*.rs; includes inline tests; excludes tests/ and examples/',
+    'analyzer_revision': '37e5d83c056c8cbf827223d5814a93c5218df1a9',
+    'analyzer_binary': str(cli), 'commands': [],
+}
+
+def record(label, command, cwd=root):
+    result = subprocess.run(command, cwd=cwd, capture_output=True)
+    (out / (label + '.stdout')).write_bytes(result.stdout)
+    (out / (label + '.stderr')).write_bytes(result.stderr)
+    meta['commands'].append({'label': label, 'argv': command,
+                             'cwd': str(cwd), 'exit': result.returncode})
+    return result
+
+def finish(state, reason, **details):
+    (out / 'metadata.json').write_text(json.dumps(meta, indent=2) + '\n')
+    coverage = dict(state=state, reason=reason, **details)
+    (out / 'coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
+    print(json.dumps(coverage))
+    sys.exit(0 if state == 'complete' else 1)
+
+meta['source_revision'] = record('revision', ['git', 'rev-parse', 'HEAD']).stdout.decode().strip()
+record('git-status', ['git', 'status', '--porcelain=v1', '--untracked-files=all'])
+diff = record('git-diff', ['git', 'diff', '--binary', 'HEAD'])
+(out / 'changes.patch').write_bytes(diff.stdout)
+tracked = record('tracked', ['git', 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'src'])
+expected = set(p for p in tracked.stdout.decode().splitlines() if p.endswith('.rs'))
+expected.update(str(p) for p in Path('src').rglob('*.rs'))
+expected = sorted(expected)
+meta['expected_files'] = expected
+if not cli.is_file() or not os.access(cli, os.X_OK):
+    finish('unavailable', 'analyzer absent or not executable')
+if not expected or any(not Path(p).is_file() for p in expected):
+    finish('unavailable', 'sources absent', missing=[p for p in expected if not Path(p).is_file()])
+meta['analyzer_sha256'] = hashlib.sha256(cli.read_bytes()).hexdigest()
+receipt = cli.parent.parent / '.crates2.json'
+if receipt.is_file():
+    shutil.copyfile(receipt, out / 'cargo-install.json')
+for label, command in [('analyzer-version', [str(cli), '--version']),
+                       ('rustc', ['rustc', '-Vv']), ('cargo', ['cargo', '-V'])]:
+    if record(label, command).returncode:
+        finish('unavailable', label + ' failed')
+snapshot = out / 'snapshot'
+hashes = {}
+try:
+    for name in expected + ['Cargo.toml', 'Cargo.lock']:
+        data = Path(name).read_bytes()
+        dest = snapshot / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        hashes[name] = hashlib.sha256(data).hexdigest()
+except OSError as error:
+    finish('unavailable', str(error))
+(out / 'sources.sha256.json').write_text(json.dumps(hashes, indent=2) + '\n')
+cc = out / 'cc'
+cc.mkdir()
+metrics = record('metrics', [str(cli), '-m', '-p', 'src', '-I', '*.rs',
+                            '-O', 'json', '-o', str(cc)], snapshot)
+syntax = record('syntax', [str(cli), '-p', 'src', '-I', '*.rs', '-f', 'error'], snapshot)
+try:
+    reports = [json.loads(p.read_text()) for p in sorted(cc.rglob('*.json'))]
+    emitted = sorted(report['name'] for report in reports)
+except (OSError, ValueError, KeyError) as error:
+    finish('incomplete', 'invalid JSON: ' + str(error))
+if (metrics.returncode or syntax.returncode or metrics.stderr.strip()
+        or syntax.stderr.strip() or syntax.stdout.strip() or emitted != expected):
+    finish('incomplete', 'inspect metrics/syntax logs and file inventory',
+           expected=expected, emitted=emitted)
+finish('complete', 'matching inventory; no parser errors',
+       expected=expected, emitted=emitted)
+PY
+```
+
+La propiedad `analyzer_revision` declara la revisión requerida; contrastarla con
+`cargo-install.json` y el hash del binario de la instalación seleccionada. No
+atribuir ese SHA de fuentes a un ejecutable arbitrario llamado igual. Se retienen
+los stdout/stderr originales, argv, directorio de ejecución, códigos de salida,
+revisión completa de Git y versiones del toolchain. `coverage.json` acredita el
+estado de esa captura, no el de una ejecución anterior.
+
+Para reconstruir las entradas, usar directamente `snapshot/` y comprobar los
+hashes de `sources.sha256.json`. También se puede recuperar `source_revision`,
+aplicar `changes.patch` y restaurar las fuentes adicionales desde el snapshot.
+Para cada unidad, conservar archivo, ruta de espacios padres, `kind`, `name`,
+`start_line` y `end_line`: los nombres de métodos y cierres no son únicos.
+El JSON original conserva todas las métricas y la jerarquía `spaces`.
+
+La receta se ejecutó en `target/analysis/core-initial` sobre
+`69b2d7745bb8306d751713d251b25e9e16ea7280`, con cambios documentales registrados
+y sin cambios en `src`. Se verificaron los ocho hashes de fuentes/configuración,
+la cobertura 6/6 y los rangos de los 82 espacios JSON contra sus fuentes
+capturadas; sus identidades jerárquicas fueron únicas. «Espacios» incluye
+contenedores y no equivale al número de funciones.
