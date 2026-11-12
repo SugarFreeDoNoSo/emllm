@@ -63,6 +63,19 @@ pub struct Program {
 }
 
 /// Estadísticas de la clausura alcanzable, calculadas al compilar.
+/// No cuentan nodos de la arena fuera del programa ni evalúan exp/ln.
+/// La consulta permanece estable aunque se libere la arena o falle la evaluación.
+/// Son conteos estructurales, no medidas de bytes, tiempo o complejidad del código.
+///
+/// ```
+/// use emllm::{expr::Arena, program::{ProgramStats, compile}};
+/// let mut arena = Arena::new(3);
+/// let one = arena.one().unwrap();
+/// let t = arena.magma(&one, &one).unwrap();
+/// let root = arena.magma(&t, &t).unwrap();
+/// let program = compile(&arena, &[root], 3).unwrap();
+/// assert_eq!(program.stats(), &ProgramStats { nodes: 3, edges: 4, roots: 1, depth: 2 });
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProgramStats {
     /// V: nodos únicos.
