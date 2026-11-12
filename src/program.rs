@@ -7,6 +7,51 @@ use std::fmt;
 use crate::expr::{Arena, BuildError, Node, NodeId};
 
 /// Snapshot cerrado cuyos hijos preceden a sus padres en `nodes()`.
+///
+/// Posee sus nodos y raíces: ampliar o liberar la arena no cambia el programa.
+/// Solo [`compile`] puede producirlo desde una construcción. Clonarlo copia un
+/// snapshot ya válido; no concede acceso mutable a sus campos.
+///
+/// ```
+/// use emllm::{eval::evaluate, expr::{Arena, Node}, program::compile};
+/// let mut arena = Arena::new(3);
+/// let one = arena.one().unwrap();
+/// let root = arena.magma(&one, &one).unwrap();
+/// let program = compile(&arena, std::slice::from_ref(&root), 2).unwrap();
+/// arena.magma(&root, &one).unwrap();
+/// drop(arena);
+/// assert_eq!(program.nodes(), &[Node::One, Node::Magma(0, 0)]);
+/// assert_eq!(program.roots(), &[1]);
+/// assert!((evaluate(&program, 2).unwrap()[0] - std::f64::consts::E).abs() <= 1e-12);
+/// ```
+///
+/// Los campos privados impiden fabricar otro programa saltándose la validación:
+///
+/// ```compile_fail
+/// use emllm::{expr::{Arena, Node}, program::{Program, compile}};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// let program = compile(&arena, &[one], 1).unwrap();
+/// let invalid = Program { nodes: vec![Node::Magma(99, 99)], ..program };
+/// ```
+///
+/// Ni los nodos ni las raíces ofrecen acceso mutable:
+///
+/// ```compile_fail
+/// use emllm::{expr::{Arena, Node}, program::compile};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// let mut program = compile(&arena, &[one], 1).unwrap();
+/// program.nodes()[0] = Node::Magma(99, 99);
+/// ```
+///
+/// ```compile_fail
+/// use emllm::{expr::Arena, program::compile};
+/// let mut arena = Arena::new(1);
+/// let one = arena.one().unwrap();
+/// let mut program = compile(&arena, &[one], 1).unwrap();
+/// program.roots()[0] = 99;
+/// ```
 #[derive(Clone, Debug)]
 pub struct Program {
     nodes: Vec<Node>,
