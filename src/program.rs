@@ -4,14 +4,15 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-use crate::expr::{Arena, BuildError, NodeId};
+use crate::expr::{Arena, BuildError, NodeId, PairTable};
 
 /// Forma cerrada de los nodos que expone la inspección del programa.
 pub use crate::expr::Node;
 
 /// Snapshot cerrado cuyos hijos preceden a sus padres en `nodes()`.
 ///
-/// Posee sus nodos y raíces: ampliar o liberar la arena no cambia el programa.
+/// Posee su tabla de pares y raíces: ampliar o liberar la arena no lo cambia.
+/// One está implícito en el índice 0; la fila k representa el nodo k+1.
 /// Solo [`compile`] puede producirlo desde una construcción. Clonarlo copia un
 /// snapshot ya válido; no concede acceso mutable a sus campos.
 ///
@@ -23,7 +24,8 @@ pub use crate::expr::Node;
 /// let program = compile(&arena, std::slice::from_ref(&root), 2).unwrap();
 /// arena.magma(&root, &one).unwrap();
 /// drop(arena);
-/// assert_eq!(program.nodes(), &[Node::One, Node::Magma(0, 0)]);
+/// assert!(program.nodes().eq([Node::One, Node::Magma(0, 0)]));
+/// assert_eq!(program.pairs(), &[[0, 0]]);
 /// assert_eq!(program.roots(), &[1]);
 /// assert!((evaluate(&program, 2).unwrap()[0] - std::f64::consts::E).abs() <= 1e-12);
 /// ```
@@ -31,21 +33,22 @@ pub use crate::expr::Node;
 /// Los campos privados impiden fabricar otro programa saltándose la validación:
 ///
 /// ```compile_fail
-/// use emllm::{expr::{Arena, Node}, program::{Program, compile}};
+/// use emllm::{expr::Arena, program::{Program, compile}};
 /// let mut arena = Arena::new(1);
 /// let one = arena.one().unwrap();
 /// let program = compile(&arena, &[one], 1).unwrap();
-/// let invalid = Program { nodes: vec![Node::Magma(99, 99)], ..program };
+/// let invalid = Program { roots: vec![99], ..program };
 /// ```
 ///
-/// Ni los nodos ni las raíces ofrecen acceso mutable:
+/// Ni las filas ni las raíces ofrecen acceso mutable:
 ///
 /// ```compile_fail
-/// use emllm::{expr::{Arena, Node}, program::compile};
-/// let mut arena = Arena::new(1);
+/// use emllm::{expr::Arena, program::compile};
+/// let mut arena = Arena::new(2);
 /// let one = arena.one().unwrap();
-/// let mut program = compile(&arena, &[one], 1).unwrap();
-/// program.nodes()[0] = Node::Magma(99, 99);
+/// let root = arena.magma(&one, &one).unwrap();
+/// let mut program = compile(&arena, &[root], 2).unwrap();
+/// program.pairs()[0] = [1, 1];
 /// ```
 ///
 /// ```compile_fail
@@ -57,7 +60,7 @@ pub use crate::expr::Node;
 /// ```
 #[derive(Clone, Debug)]
 pub struct Program {
-    nodes: Vec<Node>,
+    table: PairTable,
     roots: Vec<usize>,
     stats: ProgramStats,
 }
@@ -94,17 +97,42 @@ impl Program {
         &self.stats
     }
 
-    /// Vista inmutable en orden de evaluación. Sus posiciones identifican nodos
-    /// únicamente dentro de este snapshot, incluidos los operandos de Magma.
-    pub fn nodes(&self) -> &[Node] {
-        &self.nodes
+    /// Número lógico de nodos del snapshot, incluido One.
+    pub fn node_count(&self) -> usize {
+        self.table.node_count()
+    }
+
+    /// Copias en orden de evaluación, sin asignar una colección de nodos.
+    /// Sus posiciones y operandos son locales a este snapshot.
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = Node> + '_ {
+        self.table.nodes()
     }
 
     /// Resuelve una posición de raíz, operando o diagnóstico en este programa.
     /// No acepta un handle de construcción [`NodeId`]; sus índices pueden haber
     /// sido remapeados. Un índice fuera del snapshot devuelve `None`.
-    pub fn node(&self, index: usize) -> Option<&Node> {
-        self.nodes.get(index)
+    /// Modificar la copia devuelta no cambia el programa.
+    pub fn node(&self, index: usize) -> Option<Node> {
+        self.table.node(index)
+    }
+
+    /// Tabla residente de solo lectura, una fila por Magma único alcanzable.
+    /// La fila k describe el nodo lógico k+1, con hijos anteriores a ese nodo.
+    /// One siempre existe en el índice 0, incluso cuando no hay filas.
+    ///
+    /// ```
+    /// use emllm::{expr::{Arena, Node}, program::compile};
+    /// let mut arena = Arena::new(1);
+    /// let one = arena.one().unwrap();
+    /// let program = compile(&arena, &[one], 1).unwrap();
+    /// drop(arena);
+    /// assert!(program.pairs().is_empty());
+    /// assert_eq!(program.node_count(), 1);
+    /// assert_eq!(program.node(0), Some(Node::One));
+    /// assert_eq!(program.roots(), &[0]);
+    /// ```
+    pub fn pairs(&self) -> &[[usize; 2]] {
+        self.table.pairs()
     }
 
     /// Posiciones del snapshot, en el orden solicitado y conservando duplicados.
@@ -151,42 +179,40 @@ impl Error for CompileError {
 pub fn compile(arena: &Arena, roots: &[NodeId], max_nodes: usize) -> Result<Program, CompileError> {
     arena.validate_roots(roots).map_err(CompileError::Roots)?;
     let roots: Vec<_> = roots.iter().map(NodeId::index).collect();
-    compile_nodes(arena.nodes(), &roots, max_nodes)
+    compile_nodes(|index| arena.node(index), &roots, max_nodes)
 }
 
 fn compile_nodes(
-    source: &[Node],
+    source: impl Fn(usize) -> Option<Node>,
     roots: &[usize],
     max_nodes: usize,
 ) -> Result<Program, CompileError> {
     let mut states = HashMap::new();
     let mut remapped = HashMap::new();
-    let mut nodes = Vec::new();
+    let mut table = PairTable::default();
     let mut depths: Vec<usize> = Vec::new();
-    let mut edges = 0;
     let mut stack = Vec::new();
 
     for &root in roots {
         stack.push((root, false));
         while let Some((index, exiting)) = stack.pop() {
-            let node = *source
-                .get(index)
-                .ok_or(CompileError::InvalidReference { index })?;
+            let node = source(index).ok_or(CompileError::InvalidReference { index })?;
             if exiting {
                 let (compiled, depth) = match node {
-                    Node::One => (Node::One, 0),
+                    Node::One => {
+                        table.initialize_one();
+                        (0, 0)
+                    }
                     Node::Magma(left, right) => {
                         let left = remapped[&left];
                         let right = remapped[&right];
-                        edges += 2;
                         (
-                            Node::Magma(left, right),
+                            table.push([left, right]),
                             1 + depths[left].max(depths[right]),
                         )
                     }
                 };
-                remapped.insert(index, nodes.len());
-                nodes.push(compiled);
+                remapped.insert(index, compiled);
                 depths.push(depth);
                 states.insert(index, 2);
                 continue;
@@ -210,12 +236,12 @@ fn compile_nodes(
 
     Ok(Program {
         stats: ProgramStats {
-            nodes: nodes.len(),
-            edges,
+            nodes: table.node_count(),
+            edges: 2 * table.pairs().len(),
             roots: roots.len(),
             depth: depths.into_iter().max().unwrap_or(0),
         },
-        nodes,
+        table,
         roots: roots.iter().map(|root| remapped[root]).collect(),
     })
 }
@@ -226,31 +252,31 @@ mod tests {
 
     #[test]
     fn rejects_malformed_graphs() {
-        assert!(matches!(
-            compile_nodes(&[Node::Magma(0, 0)], &[0], 10),
-            Err(CompileError::Cycle { index: 0 })
-        ));
-        assert!(matches!(
-            compile_nodes(&[Node::Magma(1, 2), Node::One], &[0], 10),
-            Err(CompileError::InvalidReference { index: 2 })
-        ));
-        assert!(matches!(
-            compile_nodes(&[Node::Magma(1, 1), Node::Magma(0, 0)], &[0], 10),
-            Err(CompileError::Cycle { .. })
-        ));
+        for (pairs, expected) in [
+            (vec![[2, 0]], CompileError::InvalidReference { index: 2 }),
+            (vec![[1, 0]], CompileError::Cycle { index: 1 }),
+            (vec![[2, 0], [1, 0]], CompileError::Cycle { index: 1 }),
+        ] {
+            let source = PairTable::from_test_pairs(pairs);
+            let result = compile_nodes(|index| source.node(index), &[1], 3);
+            assert_eq!(result.unwrap_err(), expected);
+        }
     }
 
     #[test]
-    fn compiles_deep_graphs_without_recursion() {
+    fn compiles_deep_shared_graphs_without_expanding_the_tree() {
         let mut arena = Arena::new(20_001);
-        let one = arena.one().unwrap();
-        let mut root = one.clone();
+        let mut root = arena.one().unwrap();
         for _ in 0..20_000 {
-            root = arena.magma(&root, &one).unwrap();
+            root = arena.magma(&root, &root).unwrap();
         }
+        assert_eq!(arena.pairs().len(), 20_000);
         let program = compile(&arena, &[root], 20_001).unwrap();
         drop(arena);
+        assert_eq!(program.pairs().len(), 20_000);
+        assert_eq!(program.node_count(), 20_001);
         assert_eq!(program.nodes().len(), 20_001);
+        assert_eq!(program.roots(), &[20_000]);
         assert_eq!(
             program.stats(),
             &ProgramStats {
@@ -260,9 +286,10 @@ mod tests {
                 depth: 20_000,
             }
         );
-        for (index, node) in program.nodes().iter().enumerate() {
+        for (index, node) in program.nodes().enumerate() {
             if let Node::Magma(left, right) = node {
-                assert!(*left < index && *right < index);
+                assert_eq!([left, right], [index - 1, index - 1]);
+                assert_eq!(program.pairs()[index - 1], [left, right]);
             }
         }
     }
@@ -273,7 +300,7 @@ mod tests {
         let one = arena.one().unwrap();
         let e = arena.magma(&one, &one).unwrap();
         arena.magma(&e, &one).unwrap();
-        assert_eq!(compile(&arena, &[one], 1).unwrap().nodes().len(), 1);
+        assert_eq!(compile(&arena, &[one], 1).unwrap().node_count(), 1);
         assert!(matches!(
             compile(&arena, &[e], 1),
             Err(CompileError::NodeLimit { limit: 1 })

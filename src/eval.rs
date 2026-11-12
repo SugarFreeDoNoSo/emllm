@@ -24,7 +24,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::program::{Node, Program};
+use crate::program::Program;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EvalErrorKind {
@@ -38,7 +38,8 @@ pub enum EvalErrorKind {
     NodeLimit { limit: usize },
 }
 
-/// `node` identifica una posición de `Program::nodes()`, no de la arena original.
+/// `node` identifica un nodo lógico del programa, no una fila ni una posición
+/// de la arena original. Un Magma de índice i está en la fila i-1.
 /// Es `Some` para fallos numéricos y `None` para el rechazo previo de presupuesto.
 /// Resuélvase con [`Program::node`] sobre el programa de esta evaluación.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,6 +61,8 @@ impl Error for EvalError {}
 /// raíces adicionales. La respuesta contiene todas las salidas o un error.
 /// Cada llamada posee su buffer de valores y recibe su propio límite; no guarda
 /// cachés, configuración ambiental ni resultados numéricos en el programa.
+/// One consume un nodo aunque no ocupe fila. Tras comprobar el presupuesto se
+/// inicializa su valor 1.0 y se recorren pares; la fila k ejecuta el nodo k+1.
 ///
 /// # Errors
 ///
@@ -101,18 +104,16 @@ impl Error for EvalError {}
 /// evaluate(&nodes, 1);
 /// ```
 pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalError> {
-    if program.nodes().len() > max_nodes {
+    if program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },
             node: None,
         });
     }
-    let mut values: Vec<f64> = Vec::with_capacity(program.nodes().len());
-    for (index, node) in program.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::One => 1.0,
-            Node::Magma(left, right) => magma_value(values[left], values[right], index)?,
-        };
+    let mut values: Vec<f64> = Vec::with_capacity(program.node_count());
+    values.push(1.0);
+    for (row, &[left, right]) in program.pairs().iter().enumerate() {
+        let value = magma_value(values[left], values[right], row + 1)?;
         values.push(value);
     }
     Ok(program.roots().iter().map(|&root| values[root]).collect())

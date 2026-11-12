@@ -14,6 +14,10 @@ fn counts_shared_operands_and_repeated_roots_by_position() {
         (vec![t.clone(), t], (2, 2, 2, 1)),
     ] {
         let program = compile(&arena, &roots, 3).unwrap();
+        assert_eq!(program.node_count(), nodes);
+        assert_eq!(program.pairs().len(), nodes - 1);
+        assert_eq!(edges, 2 * program.pairs().len());
+        assert_eq!(program.pairs(), &[[0, 0], [1, 1]][..nodes - 1]);
         assert_eq!(
             program.stats(),
             &ProgramStats {
@@ -42,7 +46,7 @@ fn statistics_exclude_arena_history_and_survive_its_destruction() {
     assert_eq!(program.stats(), &expected);
     let more = arena.magma(&unused, &one).unwrap();
     arena.magma(&more, &one).unwrap();
-    assert_eq!(arena.nodes().len(), 5);
+    assert_eq!(arena.node_count(), 5);
     assert_eq!(program.stats(), &expected);
     drop(arena);
     assert_eq!(program.stats(), &expected);

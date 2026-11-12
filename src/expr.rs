@@ -5,11 +5,64 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-/// Las únicas formas ejecutables; las posiciones de hijos son locales a la arena.
+/// Vista lógica de las únicas formas ejecutables; los hijos son índices locales
+/// a la arena o al programa que produjo la copia.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Node {
     One,
     Magma(usize, usize),
+}
+
+/// Almacenamiento del DAG: One ocupa el índice lógico 0 sin fila.
+/// La fila k representa el nodo k+1. Los valores válidos solo añaden hijos
+/// existentes; la marca distingue una arena vacía de One sin filas.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PairTable {
+    pairs: Vec<[usize; 2]>,
+    has_one: bool,
+}
+
+impl PairTable {
+    /// Solo para fixtures internas de validación; no existe en la biblioteca
+    /// de producción y puede contener referencias inexistentes o ciclos.
+    #[cfg(test)]
+    pub(crate) fn from_test_pairs(pairs: Vec<[usize; 2]>) -> Self {
+        Self {
+            pairs,
+            has_one: true,
+        }
+    }
+
+    pub(crate) fn node_count(&self) -> usize {
+        self.pairs.len() + usize::from(self.has_one)
+    }
+
+    pub(crate) fn pairs(&self) -> &[[usize; 2]] {
+        &self.pairs
+    }
+
+    pub(crate) fn node(&self, index: usize) -> Option<Node> {
+        if index == 0 {
+            return self.has_one.then_some(Node::One);
+        }
+        let &[left, right] = self.pairs.get(index - 1)?;
+        Some(Node::Magma(left, right))
+    }
+
+    pub(crate) fn nodes(&self) -> impl ExactSizeIterator<Item = Node> + '_ {
+        (0..self.node_count()).map(|index| self.node(index).expect("bounded logical index"))
+    }
+
+    pub(crate) fn initialize_one(&mut self) {
+        self.has_one = true;
+    }
+
+    pub(crate) fn push(&mut self, pair: [usize; 2]) -> usize {
+        let index = self.node_count();
+        debug_assert!(self.has_one && pair.iter().all(|&child| child < index));
+        self.pairs.push(pair);
+        index
+    }
 }
 
 /// Referencia opaca que conserva la identidad de su arena de origen.
@@ -86,8 +139,8 @@ impl Error for BuildError {}
 #[derive(Debug)]
 pub struct Arena {
     identity: Arc<()>,
-    nodes: Vec<Node>,
-    interned: HashMap<Node, usize>,
+    table: PairTable,
+    interned: HashMap<[usize; 2], usize>,
     max_nodes: usize,
 }
 
@@ -96,15 +149,53 @@ impl Arena {
     pub fn new(max_nodes: usize) -> Self {
         Self {
             identity: Arc::new(()),
-            nodes: Vec::new(),
+            table: PairTable::default(),
             interned: HashMap::new(),
             max_nodes,
         }
     }
 
-    /// Inspección de solo lectura, en orden de construcción, sin evaluación.
-    pub fn nodes(&self) -> &[Node] {
-        &self.nodes
+    /// Nodos lógicos únicos, incluidos One y los Magma construidos.
+    pub fn node_count(&self) -> usize {
+        self.table.node_count()
+    }
+
+    /// Inspección por copia en orden de construcción, sin asignar una colección.
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = Node> + '_ {
+        self.table.nodes()
+    }
+
+    /// Copia de un nodo local; modificarla no altera la arena.
+    /// Devuelve `None` para cualquier índice fuera de rango.
+    pub fn node(&self, index: usize) -> Option<Node> {
+        self.table.node(index)
+    }
+
+    /// Filas residentes de solo lectura: la fila k contiene los operandos del
+    /// nodo lógico k+1. One ocupa el índice 0 sin fila cuando se ha construido;
+    /// una arena nueva todavía no contiene One. Consultar [`Self::node_count`]
+    /// para distinguir ambos casos y contar el presupuesto lógico.
+    ///
+    /// ```
+    /// use emllm::expr::Arena;
+    /// let mut arena = Arena::new(2);
+    /// let one = arena.one().unwrap();
+    /// arena.magma(&one, &one).unwrap();
+    /// assert_eq!(arena.pairs(), &[[0, 0]]);
+    /// assert_eq!(arena.node_count(), 2);
+    /// ```
+    ///
+    /// La vista prestada no permite modificar operandos:
+    ///
+    /// ```compile_fail
+    /// use emllm::expr::Arena;
+    /// let mut arena = Arena::new(2);
+    /// let one = arena.one().unwrap();
+    /// arena.magma(&one, &one).unwrap();
+    /// arena.pairs()[0] = [1, 1];
+    /// ```
+    pub fn pairs(&self) -> &[[usize; 2]] {
+        self.table.pairs()
     }
 
     pub fn node_limit(&self) -> usize {
@@ -112,13 +203,24 @@ impl Arena {
     }
 
     pub fn one(&mut self) -> Result<NodeId, BuildError> {
-        self.intern(Node::One)
+        if self.node_count() == 0 {
+            self.check_node_budget()?;
+            self.table.initialize_one();
+        }
+        Ok(self.handle(0))
     }
 
     pub fn magma(&mut self, left: &NodeId, right: &NodeId) -> Result<NodeId, BuildError> {
         let left = self.validate_node(left)?;
         let right = self.validate_node(right)?;
-        self.intern(Node::Magma(left, right))
+        let pair = [left, right];
+        if let Some(&index) = self.interned.get(&pair) {
+            return Ok(self.handle(index));
+        }
+        self.check_node_budget()?;
+        let index = self.table.push(pair);
+        self.interned.insert(pair, index);
+        Ok(self.handle(index))
     }
 
     /// Comprueba presencia y procedencia; no evalúa ni produce un programa.
@@ -137,30 +239,26 @@ impl Arena {
         if !Arc::ptr_eq(&self.identity, &id.arena) {
             return Err(BuildError::ForeignReference);
         }
-        if id.index >= self.nodes.len() {
+        if id.index >= self.node_count() {
             return Err(BuildError::InvalidReference { index: id.index });
         }
         Ok(id.index)
     }
 
-    fn intern(&mut self, node: Node) -> Result<NodeId, BuildError> {
-        let index = if let Some(&index) = self.interned.get(&node) {
-            index
-        } else {
-            if self.nodes.len() >= self.max_nodes {
-                return Err(BuildError::NodeLimit {
-                    limit: self.max_nodes,
-                });
-            }
-            let index = self.nodes.len();
-            self.nodes.push(node);
-            self.interned.insert(node, index);
-            index
-        };
-        Ok(NodeId {
+    fn check_node_budget(&self) -> Result<(), BuildError> {
+        if self.node_count() >= self.max_nodes {
+            return Err(BuildError::NodeLimit {
+                limit: self.max_nodes,
+            });
+        }
+        Ok(())
+    }
+
+    fn handle(&self, index: usize) -> NodeId {
+        NodeId {
             arena: self.identity.clone(),
             index,
-        })
+        }
     }
 }
 
@@ -178,7 +276,7 @@ mod tests {
         let left = arena.magma(&one, &e).unwrap();
         let right = arena.magma(&e, &one).unwrap();
         assert_ne!(left, right);
-        assert_eq!(arena.nodes.len(), 4);
+        assert_eq!(arena.node_count(), 4);
     }
 
     #[test]
@@ -195,7 +293,7 @@ mod tests {
             first.validate_roots(&[b]),
             Err(BuildError::ForeignReference)
         );
-        assert_eq!(first.nodes.len(), 1);
+        assert_eq!(first.node_count(), 1);
     }
 
     #[test]
@@ -210,7 +308,7 @@ mod tests {
             arena.magma(&one, &future),
             Err(BuildError::InvalidReference { index: 1 })
         );
-        assert_eq!(arena.nodes.len(), 1);
+        assert_eq!(arena.node_count(), 1);
         let mut previous = one;
         for _ in 0..100 {
             let next = arena.magma(&previous, &previous).unwrap();
@@ -225,7 +323,7 @@ mod tests {
     fn enforces_budget_without_charging_reused_nodes() {
         let mut empty = Arena::new(0);
         assert_eq!(empty.one(), Err(BuildError::NodeLimit { limit: 0 }));
-        assert!(empty.nodes().is_empty());
+        assert_eq!(empty.node_count(), 0);
 
         let mut arena = Arena::new(2);
         let one = arena.one().unwrap();
@@ -236,7 +334,7 @@ mod tests {
         );
         assert_eq!(arena.one().unwrap(), one);
         assert_eq!(arena.magma(&one, &one).unwrap(), e);
-        assert_eq!(arena.nodes(), &[Node::One, Node::Magma(0, 0)]);
+        assert!(arena.nodes().eq([Node::One, Node::Magma(0, 0)]));
     }
 
     #[test]
@@ -247,15 +345,15 @@ mod tests {
         for _ in 0..999 {
             previous = arena.magma(&previous, &one).unwrap();
         }
-        for (index, node) in arena.nodes().iter().enumerate() {
+        for (index, node) in arena.nodes().enumerate() {
             match node {
                 Node::One => assert_eq!(index, 0),
                 Node::Magma(left, right) => {
-                    assert!(*left < index);
-                    assert!(*right < index);
+                    assert!(left < index);
+                    assert!(right < index);
                 }
             }
         }
-        assert_eq!(arena.nodes().len(), arena.node_limit());
+        assert_eq!(arena.node_count(), arena.node_limit());
     }
 }

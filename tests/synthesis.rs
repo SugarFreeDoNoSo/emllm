@@ -16,15 +16,15 @@ fn synthesizes_every_rational_in_the_minimum_domain() {
             let actual = evaluate(&program, 10_000).unwrap()[0];
             let expected = f64::from(numerator) / f64::from(denominator);
             max_error = max_error.max((actual - expected).abs());
-            max_nodes = max_nodes.max(program.nodes().len());
+            max_nodes = max_nodes.max(program.node_count());
             assert!(
                 (actual - expected).abs() <= 1e-9,
                 "{numerator}/{denominator}: actual={actual}, expected={expected}"
             );
-            for (index, node) in program.nodes().iter().enumerate() {
+            for (index, node) in program.nodes().enumerate() {
                 match node {
                     Node::One => {}
-                    Node::Magma(left, right) => assert!(*left < index && *right < index),
+                    Node::Magma(left, right) => assert!(left < index && right < index),
                 }
             }
         }
@@ -47,9 +47,14 @@ fn normalizes_before_domain_validation_without_integer_overflow() {
 #[test]
 fn synthesis_respects_construction_budget() {
     let mut arena = Arena::new(2);
+    let one = arena.one().unwrap();
+    let previous = compile(&arena, &[one], 1).unwrap();
     let result = rational(&mut arena, Rational::new(1, 2).unwrap());
     assert_eq!(result, Err(BuildError::NodeLimit { limit: 2 }));
-    assert_eq!(arena.nodes().len(), 2);
+    assert_eq!(arena.node_count(), 2);
+    assert_eq!(arena.pairs(), &[[0, 0]]);
+    assert!(arena.nodes().eq([Node::One, Node::Magma(0, 0)]));
+    assert_eq!(evaluate(&previous, 1).unwrap(), vec![1.0]);
 }
 
 #[test]
@@ -80,11 +85,11 @@ fn arithmetic_and_compositions_match_an_independent_reference() {
                     "x={x}, y={y}, operation={operation}, value={value}, expected={reference}, error={error}"
                 );
             }
-            max_nodes = max_nodes.max(program.nodes().len());
-            for (index, node) in program.nodes().iter().enumerate() {
+            max_nodes = max_nodes.max(program.node_count());
+            for (index, node) in program.nodes().enumerate() {
                 match node {
                     Node::One => {}
-                    Node::Magma(left, right) => assert!(*left < index && *right < index),
+                    Node::Magma(left, right) => assert!(left < index && right < index),
                 }
             }
         }

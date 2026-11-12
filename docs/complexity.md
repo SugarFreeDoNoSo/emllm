@@ -56,6 +56,25 @@ del evaluador. Eso no cambia la complejidad ciclomática de su código fuente.
 Tampoco menos nodos, menor profundidad o menos decisiones locales demuestran
 por sí solos aceleración, menor memoria real, precisión o cumplimiento de SOLID.
 
+### Recorrido de las tablas compartidas
+
+La representación de pares conserva una fila por Magma único y One implícito
+en el índice lógico 0. `Arena` y `Program` poseen una `PairTable` con pares
+`[usize; 2]` y una marca de presencia de One, sin una colección residente de
+nodos etiquetados. El mapa de internado es un índice auxiliar de la arena.
+`node()` reconstruye una copia y `nodes()` usa un rango con transformación por
+índice, sin asignar un vector de nodos. La compilación lee por índice y emite
+pares directamente; estados, remapeo, pila y profundidades son temporales.
+El evaluador mantiene valores `f64` locales a la llamada, sin desplegar el árbol.
+
+La prueba interna `compiles_deep_shared_graphs_without_expanding_the_tree`
+construye `t0=One`, `ti=Magma(ti-1,ti-1)` hasta i=20.000. Compilación e inspección
+iterativas verifican exactamente 20.000 filas, V=20.001, E=40.000, R=1 y
+D=20.000, sin evaluación numérica. Compartir ambos operandos en cada nivel
+mantiene crecimiento lineal en vez de duplicar subárboles. Las colecciones
+`Node` que algunas pruebas obtienen con `collect` pertenecen al consumidor;
+no son cachés del núcleo ni entradas materializadas por el compilador.
+
 ## Demostración neuronal
 
 ```sh
@@ -76,6 +95,52 @@ la arena compartida terminó con 1.684 nodos. Todas las salidas satisfacen `1e-6
 frente a la referencia independiente. Son observaciones de estas tres fixtures,
 no una cota global de precisión ni un benchmark de rendimiento. Los errores de
 dominio y desbordamiento siguen siendo posibles en otros programas válidos.
+
+## Payload estructural de pares
+
+La demostración imprime los tamaños reales del target y, por programa,
+`pair_rows`, `pair_payload_bytes` y `tagged_node_payload_model_bytes` junto a
+V/E/R/D, presupuestos, salidas y errores. Con M filas, V nodos lógicos y
+W=`size_of::<usize>()`, las fórmulas son:
+
+- `pair_rows = program.pairs().len() = M`.
+- `pair_payload_bytes = M * size_of::<[usize; 2]>() = 2 * M * W`.
+- `tagged_node_payload_model_bytes = V * size_of::<Node>()`.
+- En un programa validado, `V=M+1` y `E=2M`; One no tiene fila, pero cuenta
+  para los presupuestos de las tres etapas. Un programa One tiene cero bytes
+  de elementos de pares, además de sus raíces, metadatos y valores temporales.
+
+El modelo etiquetado usa el enum `Node` que sigue disponible como vista lógica;
+no materializa un vector de esos valores. `size_of` incluye el padding propio
+del elemento. El tamaño del enum se consulta en cada compilación: no es un
+formato binario ni una garantía de layout entre targets o versiones de Rust.
+
+Medición del 2026-11-12 mediante `cargo run --release --example infer`, Rust
+1.92.0 (`ded5c06cf`), Cargo 1.92.0 y target nativo `aarch64-apple-darwin`.
+Fuentes de partida: `073e34a73d17a49e1d33cc7460ba5ee53ed71734` más la ampliación
+de `examples/infer.rs` de la tarea 6.1. El ejemplo medido tiene SHA-256
+`099201e007230228bac81651e5897f14386313a8f3a4f96b33ac5585bbfe6acd`.
+Los tamaños observados fueron `usize`=8, `[usize; 2]`=16 y `Node`=24 bytes.
+
+| Entrada, en orden de ejecución | V | M (`pair_rows`) | `pair_payload_bytes` | `tagged_node_payload_model_bytes` | Error absoluto |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `[0,0]` | 614 | 613 | 9808 | 14736 | 2.426e-14 |
+| `[1/2,-1/2]` | 676 | 675 | 10800 | 16224 | 9.104e-15 |
+| `[-1/2,1/2]` | 676 | 675 | 10800 | 16224 | 4.829e-15 |
+
+Se verificaron las fórmulas con esos tamaños, el orden de las tres fixtures y
+las tuplas V/E/R/D de la base. La arena conserva 1.684 nodos y los presupuestos
+siguen siendo 100.000 por etapa. Los tres errores cumplen `1e-6`. La captura
+`target/analysis/pair-payload/` conserva stdout/stderr, comandos, versiones,
+revisión, diff, fuentes originales y sus hashes; sus archivos son evidencia
+local de desarrollo ignorada por Git.
+
+Estas cifras describen únicamente los elementos estructurales ocupados.
+Excluyen capacidad sobrante de vectores, cabeceras, marca de One, tokens de
+identidad, tablas de internado, raíces, estadísticas, temporales de compilación
+y evaluación y sobrecostes del asignador. No son RSS ni heap total del proceso.
+La reducción de este payload no mide velocidad ni precisión: esta última se
+verifica por separado frente a referencias y tolerancias, manteniendo `f64`.
 
 ## Analizador externo y procedencia
 
@@ -513,3 +578,121 @@ sin errores, mismas 58 unidades y valores locales idénticos entre ambas y al
 primer reporte. Cambiaron las líneas, no los valores: `compile_nodes` ocupa
 ahora `src/program.rs:157-221`, con máximo local 12. Estos resultados siguen
 siendo evidencia de desarrollo con alcance declarado, no garantías generales.
+
+## Verificación final de tablas de pares (7.1)
+
+El 2026-11-12 se verificó `fb2019f6bb80a669a6cc101911d7384b57c25a22` más el
+ajuste de Clippy en `examples/infer.rs`, con Rust/Cargo 1.92.0 y
+`aarch64-apple-darwin`. La primera ejecución señaló
+`manual_slice_size_calculation`; se sustituyó la multiplicación explícita por
+`size_of_val(program.pairs())`, equivalente al payload `2*M*W`, y se repitieron
+las comprobaciones sobre esas fuentes finales. El ejemplo final tiene SHA-256
+`e9ea98e0f43c532f15b5cacf235fb24f1783537f2021220819cb26c7510bbe97`.
+
+| Comando | Resultado final |
+| --- | --- |
+| `cargo check --all-targets` | Satisfactorio |
+| `cargo test --release` | 37 pruebas y 15 doctests satisfactorios |
+| `cargo test --doc -- --show-output` | 7 controles positivos y 8 `compile_fail` satisfactorios |
+| `cargo fmt --check` | Satisfactorio |
+| `cargo clippy --all-targets -- -D warnings` | Satisfactorio |
+| `cargo run --release --example infer` | Tres fixtures en orden; fórmulas de payload y tolerancia 1e-6 verificadas |
+
+Los diagnósticos negativos se revisaron: E0451 protege los campos de `NodeId`
+y `Program`, E0594 impide escribir pares y raíces, y E0308 rechaza entradas de
+evaluación distintas de `&Program`. Sus controles positivos pasaron. Las pruebas
+cubren procedencia incluso tras liberar la arena, presupuestos 0/1/exactos,
+internado ordenado, copias independientes, snapshots propietarios, remapeo,
+tablas malformadas, 20.000 niveles compartidos, estadísticas y aislamiento.
+
+Se conservan las tolerancias originales: `1e-12` para e, `1e-9` para racionales,
+`1e-8` para operaciones/composiciones y `1e-6` para la red. La demostración
+repite las tuplas V/E/R/D, filas, payloads y errores de la sección de
+[almacenamiento](#payload-estructural-de-pares). El análisis de dependencias
+y fuentes mantiene la biblioteca estándar como única dependencia y la
+referencia convencional exclusivamente en pruebas/ejemplo.
+
+La captura final `target/analysis/pair-final-verification-checked/` conserva
+revisión, diff, fuentes, hashes, comandos y stdout/stderr. La primera ejecución
+permanece en `target/analysis/pair-final-verification/` con su diagnóstico de
+Clippy; no se presenta como un resultado satisfactorio. En 6.2 también pasaron
+la documentación con advertencias denegadas, el ejemplo de arquitectura y
+15 enlaces/anclas locales. Estas comprobaciones son evidencia de desarrollo,
+sin medir memoria total ni tiempo de ejecución.
+
+## Comparación ciclomática de tablas de pares (7.2)
+
+Se ejecutaron las recetas de captura y proyección anteriores con
+`RUN=target/analysis/pair-final` y `RUN=target/analysis/pair-final-repeat` sobre
+`32dd4fd85678c65b659ef78d8857c54fd2904f0c`, árbol limpio. Se reutilizó el binario
+del analizador `37e5d83c056c8cbf827223d5814a93c5218df1a9`, verificando su recibo
+Cargo y SHA-256 `8ca02c1b389db24ec87a43ed04d3e7f64c9567897c67305aed81b078bbd53351`.
+Toolchain: Rust/Cargo 1.92.0, `aarch64-apple-darwin`.
+
+Ambas capturas tienen estado **`complete`**, cobertura **6/6**, sin errores de
+parsing, omisiones ni duplicados. Coinciden los ocho hashes de fuentes y
+configuración, los JSON originales comparados como datos, las 74 identidades
+de unidad y sus valores. Se comprobaron también rangos contra las fuentes
+capturadas e identidades jerárquicas únicas. No hay mediciones ausentes o
+incompletas en estos dos reportes; `lib.rs` contiene cero funciones en el alcance,
+por lo que carece de máximo y media, no de cobertura.
+
+La base es `core-final`, repetida en `core-final-repeat`, cuyos ocho hashes
+coinciden con la dependencia verificada `fdb5880`. Su captura identifica
+`e1d2299` más el diff de formato conservado. Ambos lados utilizan el mismo
+alcance `src/**/*.rs`, analizador, comandos y proyección. Incluyen pruebas
+inline; excluyen `tests/`, `examples/`, doctests y expansión de macros.
+
+| Archivo final | Funciones/métodos | Cierres | Pruebas inline incluidas | Máximo local | Suma local | Media por unidad |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `src/eval.rs` | 6 | 2 | 3 | 6 | 19 | 2.375 |
+| `src/expr.rs` | 27 | 1 | 5 | 5 | 53 | 1.8929 |
+| `src/lib.rs` | 0 | 0 | 0 | — | 0 | — |
+| `src/network.rs` | 8 | 0 | 0 | 7 | 26 | 3.25 |
+| `src/program.rs` | 13 | 3 | 3 | 12 | 38 | 2.375 |
+| `src/synth.rs` | 14 | 0 | 0 | 11 | 61 | 4.3571 |
+| **Alcance completo** | **68** | **6** | **11** | **12** | **197** | **2.6622** |
+
+Las 11 funciones `#[test]` son un subconjunto de las 68, no unidades adicionales.
+También se incluyen el helper `PairTable::from_test_pairs` bajo `cfg(test)` y
+el cierre lector de la fixture malformada; no se atribuyen a producción. El
+analizador no selecciona configuración como rustc: el cierre dentro de
+`debug_assert!` en `PairTable::push` no se exporta como unidad independiente.
+Se mantienen las limitaciones sobre macros de la receta original.
+
+La comparación relacionó **57 unidades**, incluida la prueba profunda renombrada;
+52 conservan su valor local y cinco lo cambian. Se retiró `Arena::intern` y se
+añadieron 17 unidades: ocho de `PairTable` (siete métodos y un cierre), cinco
+métodos de arena, dos métodos de programa y dos cierres lectores. Los helpers
+de presupuesto/handle y las rutas `one`/`magma` redistribuyen el internado; no
+son una eliminación de sus comprobaciones.
+
+| Unidad / contrato | Local en base | Local final | Interpretación |
+| --- | ---: | ---: | --- |
+| `evaluate` | 6 | 4 | Recorre pares directamente, sin los brazos de One/Magma |
+| `magma_value` | 6 | 6 | Semántica y comprobaciones numéricas conservadas |
+| `Arena::one` | 1 | 3 | Presencia perezosa y presupuesto explícitos |
+| `Arena::magma` | 3 | 5 | Búsqueda del par y presupuesto antes de insertar |
+| `compile_nodes` | 12 | 12 | Recorrido y validación iterativos conservados |
+| `rejects_malformed_graphs` | 1 | 2 | Bucle sobre las tres fixtures de pares |
+| Prueba profunda renombrada | 5 | 4 | Dos hijos compartidos en cada nivel; misma profundidad |
+
+El máximo final es 12 en `src/program.rs:185-247` (`compile_nodes`); su suma
+exportada 13 incluye el cierre de 1 y no se suma otra vez a este. Del mismo
+modo, `PairTable::nodes` exporta 2: su local es 1 más un cierre independiente
+de 1. La tabla excluye contenedores y resta los hijos inmediatos una sola vez.
+
+En conjunto N pasa de 58 a 74, la suma local de 177 a 197 y la media de
+177/58≈3.0517 a 197/74≈2.6622; el máximo sigue en 12. El denominador y las
+fronteras de funciones cambiaron, así que la media menor no demuestra una
+reducción general de complejidad, tiempo o memoria. No se introducen umbrales.
+Errores, presupuestos, propiedad y precisión se acreditan con las verificaciones
+de contratos y fixtures de la sección anterior.
+
+Cada captura conserva fuentes, metadatos, recibo de instalación, hashes, logs,
+recetas ejecutadas y JSON originales. `pair-final/unit-comparison.json` conserva
+las identidades completas de ambos lados (archivo, padres, nombre, tipo y
+líneas), añadidas/retiradas y deltas locales;
+`pair-final/comparison-summary.json` registra los denominadores y agregados.
+Son archivos locales bajo `target/analysis/`; este reporte publica sus resultados
+y el procedimiento, manteniendo el analizador fuera de las dependencias del motor.

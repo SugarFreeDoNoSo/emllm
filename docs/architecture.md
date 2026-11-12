@@ -30,10 +30,17 @@ Rational / Network221 → Arena + NodeId → compile → Program
 - `Program` tiene campos privados y posee el snapshot. Se puede ampliar o liberar
   la arena sin alterarlo. `Clone` copia un programa ya válido, con coste lineal;
   distintos snapshots pueden duplicar almacenamiento.
-- `Program::nodes()` y `roots()` devuelven vistas inmutables. `node(index)`
-  resuelve una posición del snapshot o devuelve `None`. Los índices de operandos,
-  raíces y errores son locales al programa que los publicó: no son `NodeId`,
-   identificadores persistentes ni referencias intercambiables entre snapshots.
+- `Arena::nodes()` y `Program::nodes()` devuelven iteradores de longitud exacta
+  con valores `Node`; `node(index)` devuelve `Option<Node>` por copia y
+  `node_count()` cuenta nodos lógicos. Estas consultas no asignan una colección
+  de nodos y cambiar una copia no modifica la estructura. `Program::roots()`
+  conserva su slice inmutable. Los índices expuestos por un snapshot son
+  locales al programa que los publicó: no son `NodeId`,
+  identificadores persistentes ni referencias intercambiables entre snapshots.
+  Cada iterador informa los nodos restantes mediante `len()`, incluso después
+  de avanzar. `node(usize::MAX)` devuelve `None`. Guardar una copia o una
+  colección obtenida con `collect` es decisión del consumidor, no una caché del
+  núcleo; `tests/inspection.rs` comprueba esos contratos y la copia independiente.
 - `Program::stats()` consulta en O(1) los conteos V/E/R/D calculados al compilar.
   No evalúa operaciones numéricas; sus definiciones, costes y alcance están en
   [estadísticas y complejidad](complexity.md).
@@ -43,7 +50,7 @@ Rational / Network221 → Arena + NodeId → compile → Program
   accesos seguros de Rust.
 
 ```rust
-use emllm::{eval::evaluate, expr::Arena, program::compile};
+use emllm::{eval::evaluate, expr::{Arena, Node}, program::compile};
 
 let mut arena = Arena::new(3);
 let one = arena.one().unwrap();
@@ -51,8 +58,14 @@ let e = arena.magma(&one, &one).unwrap();
 let program = compile(&arena, &[e.clone(), one.clone(), e.clone()], 2).unwrap();
 arena.magma(&e, &one).unwrap();
 drop(arena);
+assert_eq!(program.node_count(), 2);
+assert_eq!(program.pairs(), &[[0, 0]]);
 assert_eq!(program.roots(), &[1, 0, 1]);
-assert!(program.node(program.roots()[0]).is_some());
+assert_eq!(program.node(program.roots()[0]), Some(Node::Magma(0, 0)));
+let mut nodes = program.nodes();
+assert_eq!(nodes.len(), 2);
+assert_eq!(nodes.next(), Some(Node::One));
+assert_eq!(nodes.len(), 1);
 let outputs = evaluate(&program, 2).unwrap();
 assert!((outputs[0] - std::f64::consts::E).abs() <= 1e-12);
 assert_eq!(outputs[1], 1.0);
@@ -65,6 +78,68 @@ Los doctests de `NodeId`, `Program` y `evaluate` incluyen controles positivos y
 estable, `compile_fail` solo exige un fallo de compilación, no un código de error
 concreto. Los controles positivos y la revisión evitan aceptar fallos debidos a
 imports o preparación incorrectos.
+
+### Índices lógicos y filas residentes
+
+Arena y programa almacenan una tabla contigua de pares `usize`. One ocupa el
+índice lógico 0 sin fila; la fila k contiene los hijos del nodo k+1. Por ejemplo,
+`[[0,0],[1,1]]` representa One, Magma(0,0) y Magma(1,1). El 0 de un índice no
+introduce una constante numérica cero: el evaluador asigna 1.0 a One.
+
+`pairs()` presta filas inmutables y `nodes()` reconstruye la vista lógica por
+copia. Ambos tipos comparten estas reglas mediante `PairTable`, privada al
+crate. La arena distingue «vacía» de «One construido» con una marca perezosa;
+One sigue consumiendo una unidad del presupuesto. Un `Program` válido siempre
+incluye One y sus filas solo apuntan a nodos anteriores.
+
+El compilador selecciona la clausura alcanzable y remapea sus índices. Una
+fila de arena no tiene por qué conservar su número en el snapshot. Los errores
+estructurales señalan índices lógicos del origen; los numéricos, índices lógicos
+del programa. Resolverlos con `node(index)`, no con `pairs()[index]`: para un
+Magma de índice i, su fila es i−1. `roots()` conserva posiciones lógicas y
+duplicados. Cada snapshot y cada clon poseen sus filas y raíces; las pruebas
+de `tests/pair_tables.rs` verifican su estabilidad después de ampliar/liberar
+la arena. El constructor de tablas malformadas solo existe bajo `cfg(test)`.
+
+Esta es una representación interna dependiente de `usize`, sin formato de
+archivo ni ruta pública para importar una tabla sin validar. El
+[payload estructural](complexity.md#payload-estructural-de-pares) cuenta
+`M * size_of::<[usize; 2]>()` bytes para M filas y compara
+`V * size_of::<Node>()` del modelo etiquetado. Excluye capacidad sobrante,
+metadatos, raíces, internado y temporales. Reducir esos elementos no demuestra
+menos memoria total, aceleración ni mayor precisión de `f64`.
+
+### Migración de firmas
+
+La adaptación de fuente afecta a la inspección pública del crate 0.1.0. En
+ambos tipos, `nodes() -> &[Node]` pasa a
+`nodes() -> impl ExactSizeIterator<Item = Node> + '_`. La consulta de programa
+`node(index) -> Option<&Node>` pasa a `Option<Node>`, y la arena ofrece la misma
+consulta por valor. `Node` conserva sus variantes públicas One/Magma.
+
+| Uso anterior | Uso actual |
+| --- | --- |
+| `.nodes().iter()` | `.nodes()` |
+| `.nodes()[index]` | `.node(index)`, tratando el `Option<Node>` |
+| `*program.node(index).unwrap()` | `program.node(index).unwrap()` si ya se comprobó el índice |
+| `Some(&Node::One)` | `Some(Node::One)` |
+| `.nodes().to_vec()` | `.nodes().collect::<Vec<_>>()` para una colección propia |
+| `.nodes().is_empty()` | `.node_count() == 0` |
+| `.nodes().len()` para presupuestos/reservas | `.node_count()` |
+
+La longitud del iterador disminuye al consumirlo; `node_count()` es el total
+lógico. Una arena vacía tiene cero nodos y filas; tras `one()` tiene un nodo
+y cero filas. Por eso `pairs().len()` no sustituye al presupuesto de nodos.
+`node(index)` devuelve `None` fuera de rango, incluido `usize::MAX`; una copia
+modificada no altera la tabla. Las consultas e iteradores no asignan una
+colección del grafo: hacerlo con `collect` es una decisión del consumidor.
+
+`pairs() -> &[[usize; 2]]` es la vista residente inmutable; `Program::roots()`
+y `Program::stats()` exponen las raíces y estadísticas del snapshot. El ejemplo
+anterior y los doctests muestran los tipos efectivos; `tests/inspection.rs` y
+`tests/pair_tables.rs` comprueban copias, iteración, desplazamiento de filas y
+propiedad. La migración modifica almacenamiento e inspección; la semántica
+numérica sigue comprobándose con las tolerancias descritas más abajo.
 
 ## Errores y presupuestos por etapa
 
@@ -96,7 +171,7 @@ aunque alguna raíz ya tuviera valor. Los programas previos permanecen intactos.
 | `expr` | Lenguaje, procedencia, internado y presupuesto de arena | Ninguna |
 | `synth` | Normalización racional y expansiones constructivas | `expr` |
 | `program` | Validación, orden topológico y snapshot inspeccionable | `expr` |
-| `eval` | Semántica numérica, temporales y errores | Vista `Node`/`Program` de `program` |
+| `eval` | Semántica numérica, temporales y errores | Pares y raíces de `Program` |
 | `network` | Forma 2-2-1 y composición de capas | `synth`, `expr` |
 | Ejemplo | Coordinar etapas y presentar resultados | API pública y referencia independiente |
 
@@ -143,6 +218,12 @@ finitud de la exponencial y del resultado. No usa clamps ni reemplaza una
 expansión por aritmética convencional. Conserva subnormales y cero por
 subdesbordamiento; una operación posterior puede fallar por dominio. La
 cancelación puede degradar un resultado real pequeño.
+
+Primero comprueba `node_count()` contra el presupuesto, incluido One. Después
+inicializa `values[0]=1.0` y recorre las filas directamente, ejecutando cada
+Magma con el identificador lógico `fila+1`. Una tabla sin filas sigue necesitando
+presupuesto uno. Los valores y las salidas son temporales de esa llamada; los
+pares no almacenan ni reutilizan resultados numéricos.
 
 La precisión de [`f64::exp`](https://doc.rust-lang.org/std/primitive.f64.html#method.exp)
 y [`f64::ln`](https://doc.rust-lang.org/std/primitive.f64.html#method.ln) no está

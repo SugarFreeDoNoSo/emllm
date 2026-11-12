@@ -27,7 +27,7 @@ fn validates_input_dimensions_before_constructing_any_nodes() {
                 actual: input.len(),
             })
         );
-        assert!(arena.nodes().is_empty());
+        assert_eq!(arena.node_count(), 0);
     }
 }
 
@@ -41,10 +41,10 @@ fn constructs_all_fixture_roots_without_evaluation() {
         .collect();
     let program = compile(&arena, &roots, 100_000).unwrap();
     assert_eq!(program.roots().len(), 3);
-    for (index, node) in program.nodes().iter().enumerate() {
+    for (index, node) in program.nodes().enumerate() {
         match node {
             Node::One => {}
-            Node::Magma(left, right) => assert!(*left < index && *right < index),
+            Node::Magma(left, right) => assert!(left < index && right < index),
         }
     }
 }
@@ -61,20 +61,13 @@ fn all_three_fixtures_match_the_independent_reference() {
         let error = (actual - expected).abs();
         eprintln!(
             "input={reference_input:?}, actual={actual:.15}, reference={expected:.15}, abs_error={error:.3e}, nodes={}",
-            program.nodes().len()
+            program.node_count()
         );
         assert!(error <= 1e-6, "input={reference_input:?}, error={error}");
-        assert_eq!(
-            program
-                .nodes()
-                .iter()
-                .filter(|node| **node == Node::One)
-                .count(),
-            1
-        );
-        for (index, node) in program.nodes().iter().enumerate() {
+        assert_eq!(program.nodes().filter(|node| *node == Node::One).count(), 1);
+        for (index, node) in program.nodes().enumerate() {
             if let Node::Magma(left, right) = node {
-                assert!(*left < index && *right < index);
+                assert!(left < index && right < index);
             }
         }
     }
@@ -87,13 +80,13 @@ fn new_inputs_preserve_previous_closed_programs() {
     let mut arena = Arena::new(100_000);
     let first_root = network.build(&mut arena, &inputs[0]).unwrap();
     let first = compile(&arena, std::slice::from_ref(&first_root), 100_000).unwrap();
-    let original_nodes = first.nodes().to_vec();
+    let original_nodes = first.nodes().collect::<Vec<_>>();
     let second_root = network.build(&mut arena, &inputs[1]).unwrap();
     assert_ne!(first_root, second_root);
     let second = compile(&arena, &[second_root], 100_000).unwrap();
     let first_again = compile(&arena, &[first_root], 100_000).unwrap();
-    assert_eq!(first.nodes(), original_nodes);
-    assert_eq!(first_again.nodes(), original_nodes);
+    assert_eq!(first.nodes().collect::<Vec<_>>(), original_nodes);
+    assert_eq!(first_again.nodes().collect::<Vec<_>>(), original_nodes);
     assert_eq!(first_again.roots(), first.roots());
     drop(arena);
     for program in [first, first_again] {
