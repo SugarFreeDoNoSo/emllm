@@ -22,7 +22,7 @@
 
 ## 4. Inferencia de integración
 
-- [ ] 4.1 Implementar constructor de red 2-2-1, activación exp(-z*z) y salida afín mediante las macros puras; verificar dimensiones inválidas y que todas las raíces se construyen antes de evaluar.
+- [x] 4.1 Implementar constructor de red 2-2-1, activación exp(-z*z) y salida afín mediante las macros puras; verificar dimensiones inválidas y que todas las raíces se construyen antes de evaluar.
 - [ ] 4.2 Implementar referencia aritmética independiente en pruebas y ejecutar las tres fixtures de la especificación; verificar error absoluto máximo 1e-6 y representación One/Magma de entradas, pesos y sesgos.
 - [ ] 4.3 Añadir ejemplo ejecutable con número de nodos, presupuestos y error observado; verificar que una nueva entrada genera nuevas raíces y conserva el significado de las anteriores.
 - [ ] 4.4 Actualizar README con comandos exactos de pruebas y ejemplo, alcance y límites; ejecutar los comandos documentados y registrar resultados locales sin reutilizar métricas del prototipo externo.
