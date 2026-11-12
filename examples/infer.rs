@@ -28,16 +28,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         programs.push(compile(&arena, &[root], compile_budget)?);
     }
     println!(
-        "budgets: build={build_budget}, compile={compile_budget}, evaluation={evaluation_budget}; arena_nodes={}",
+        "budgets (nodes): build={build_budget}, compile={compile_budget}, evaluation={evaluation_budget}; arena_nodes={}",
         arena.nodes().len()
     );
+    println!("per-program graph: V=unique_nodes, E=operand_links, R=root_positions, D=depth_in_links");
     for (program, input) in programs.iter().zip(reference::INPUTS) {
+        let stats = program.stats();
         let actual = evaluate(program, evaluation_budget)?[0];
         let expected = reference::infer(input);
         let error = (actual - expected).abs();
         println!(
-            "input={input:?}, nodes={}, output={actual:.15}, reference={expected:.15}, abs_error={error:.3e}, tolerance={tolerance:.1e}",
-            program.nodes().len()
+            "input={input:?}, V={}, E={}, R={}, D={}, output={actual:.15}, reference={expected:.15}, abs_error={error:.3e}, tolerance={tolerance:.1e}",
+            stats.nodes, stats.edges, stats.roots, stats.depth
         );
         if !error.is_finite() || error > tolerance {
             return Err(format!("fixture {input:?} exceeds numerical tolerance: {error}").into());
