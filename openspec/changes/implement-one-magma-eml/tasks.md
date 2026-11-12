@@ -17,7 +17,7 @@
 
 - [x] 3.1 Derivar y documentar expansiones One/Magma de negación, suma, producto y racionales acotados, con condiciones de positividad; verificar cada identidad algebraicamente antes de integrarla, sin inferirla solo de ejemplos numéricos.
 - [x] 3.2 Implementar las expansiones y normalización racional sin constantes ejecutables; verificar todos los racionales del dominio mínimo, denominador cero y presupuesto agotado.
-- [ ] 3.3 Añadir pruebas independientes de suma, producto y negación para {-1/2,0,1/2}; verificar tolerancia 1e-8 y pureza de todos los nodos alcanzables, incluyendo expresiones compuestas.
+- [x] 3.3 Añadir pruebas independientes de suma, producto y negación para {-1/2,0,1/2}; verificar tolerancia 1e-8 y pureza de todos los nodos alcanzables, incluyendo expresiones compuestas.
 - [ ] 3.4 Documentar las expansiones elegidas y sus límites numéricos con resultados nativos; verificar que cualquier fallo bloquea el avance y no se sortea mediante instrucciones aritméticas adicionales.
 
 ## 4. Inferencia de integración
