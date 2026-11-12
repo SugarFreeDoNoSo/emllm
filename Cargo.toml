@@ -1,0 +1,7 @@
+[package]
+name = "emllm"
+version = "0.1.0"
+edition = "2024"
+description = "Closed One/Magma expression graphs and a small neural inference experiment"
+
+[dependencies]
