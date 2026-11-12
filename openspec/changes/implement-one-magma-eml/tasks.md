@@ -2,7 +2,7 @@
 
 ## 1. Núcleo de expresiones
 
-- [ ] 1.1 Crear proyecto Cargo de biblioteca con módulos para expresiones, síntesis, evaluación y red; verificar compilación nativa con cargo check.
+- [x] 1.1 Crear proyecto Cargo de biblioteca con módulos para expresiones, síntesis, evaluación y red; verificar compilación nativa con cargo check.
 - [ ] 1.2 Implementar arena One/Magma, referencias validadas, raíces e internado estructural; verificar pruebas de operandos ordenados, compartición, referencias ajenas y ausencia de ciclos construibles.
 - [ ] 1.3 Implementar presupuestos de construcción y recorrido de inspección; verificar que un presupuesto pequeño devuelve error y que toda expresión aceptada contiene únicamente las dos formas permitidas.
 - [ ] 1.4 Documentar semántica, identidad estructural y separación construcción/evaluación en documentación del núcleo; verificar que ejemplos de construcción no llaman al evaluador.
