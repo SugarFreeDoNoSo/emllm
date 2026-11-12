@@ -1,3 +1,4 @@
+use emllm::eval::{EvalError, EvalErrorKind, evaluate};
 use emllm::expr::{Arena, BuildError, Node};
 use emllm::program::{CompileError, Program, compile};
 
@@ -77,6 +78,14 @@ fn one_program_requires_a_logical_node_but_no_pair_row() {
     assert_eq!(program.node(0), Some(Node::One));
     assert!(program.nodes().eq([Node::One]));
     assert_eq!(program.node(1), None);
+    assert_eq!(
+        evaluate(&program, 0),
+        Err(EvalError {
+            kind: EvalErrorKind::NodeLimit { limit: 0 },
+            node: None,
+        })
+    );
+    assert_eq!(evaluate(&program, 1).unwrap(), vec![1.0]);
 }
 
 #[test]

@@ -129,7 +129,7 @@ aunque alguna raíz ya tuviera valor. Los programas previos permanecen intactos.
 | `expr` | Lenguaje, procedencia, internado y presupuesto de arena | Ninguna |
 | `synth` | Normalización racional y expansiones constructivas | `expr` |
 | `program` | Validación, orden topológico y snapshot inspeccionable | `expr` |
-| `eval` | Semántica numérica, temporales y errores | Vista `Node`/`Program` de `program` |
+| `eval` | Semántica numérica, temporales y errores | Pares y raíces de `Program` |
 | `network` | Forma 2-2-1 y composición de capas | `synth`, `expr` |
 | Ejemplo | Coordinar etapas y presentar resultados | API pública y referencia independiente |
 
@@ -176,6 +176,12 @@ finitud de la exponencial y del resultado. No usa clamps ni reemplaza una
 expansión por aritmética convencional. Conserva subnormales y cero por
 subdesbordamiento; una operación posterior puede fallar por dominio. La
 cancelación puede degradar un resultado real pequeño.
+
+Primero comprueba `node_count()` contra el presupuesto, incluido One. Después
+inicializa `values[0]=1.0` y recorre las filas directamente, ejecutando cada
+Magma con el identificador lógico `fila+1`. Una tabla sin filas sigue necesitando
+presupuesto uno. Los valores y las salidas son temporales de esa llamada; los
+pares no almacenan ni reutilizan resultados numéricos.
 
 La precisión de [`f64::exp`](https://doc.rust-lang.org/std/primitive.f64.html#method.exp)
 y [`f64::ln`](https://doc.rust-lang.org/std/primitive.f64.html#method.ln) no está

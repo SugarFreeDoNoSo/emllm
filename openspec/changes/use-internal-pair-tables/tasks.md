@@ -23,7 +23,7 @@
 
 ## 5. Evaluacion directa y contratos numericos
 
-- [ ] 5.1 Adaptar `evaluate` al recorrido directo de pares, inicializando One tras comprobar el presupuesto lógico y usando fila+1 para diagnósticos; documentar esta correspondencia y verificar One, Magma(One,One), raíces [1,0,1], presupuesto cero con tabla vacía y los errores de dominio/desbordamiento de la base sin cambiar la semántica numérica.
+- [x] 5.1 Adaptar `evaluate` al recorrido directo de pares, inicializando One tras comprobar el presupuesto lógico y usando fila+1 para diagnósticos; documentar esta correspondencia y verificar One, Magma(One,One), raíces [1,0,1], presupuesto cero con tabla vacía y los errores de dominio/desbordamiento de la base sin cambiar la semántica numérica.
 - [ ] 5.2 Verificar que el fallo de una dependencia entre varias raíces devuelve un error resoluble por inspección sin salidas parciales; ejecutar evaluaciones intercaladas y reintentos de presupuesto, comprobando preservación de pares/raíces/estadísticas y tolerancias. Revisar que `f64` sigue limitado a los valores de evaluación y que no se introducen clamps, reconocimiento de expansiones ni referencia convencional en producción.
 
 ## 6. Evidencia de almacenamiento y guia de migracion

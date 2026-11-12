@@ -47,6 +47,7 @@ fn compilation_preserves_root_positions_and_sharing_within_its_budget() {
     let roots = [t.clone(), one, t];
     let program = compile(&arena, &roots, 2).unwrap();
     assert!(program.nodes().eq([Node::One, Node::Magma(0, 0)]));
+    assert_eq!(program.pairs(), &[[0, 0]]);
     assert_eq!(program.roots(), &[1, 0, 1]);
     let repeated = compile(&arena, &roots, 2).unwrap();
     assert!(program.nodes().eq(repeated.nodes()));
