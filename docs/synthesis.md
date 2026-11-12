@@ -140,3 +140,36 @@ El dominio de aceptación numérica incluye los racionales iniciales, suma,
 negación y producto sobre {-1/2,0,1/2}, y las tres fixtures neuronales de la
 especificación. Sus tolerancias deben comprobarse; no se extrapolan al conjunto
 de todos los DAGs o a redes de mayor tamaño.
+
+## Resultados nativos iniciales
+
+Medición realizada sobre la implementación de la tarea 3.3 (commit `6e2639e`),
+con `rustc 1.92.0 (ded5c06cf 2025-12-08)`, LLVM 21.1.3, host
+`aarch64-apple-darwin`, perfil de pruebas sin optimización. Comando:
+
+```sh
+cargo test --test synthesis -- --nocapture
+```
+
+| Casos | Error absoluto máximo observado | Tolerancia exigida | Máximo de nodos alcanzables por programa |
+| --- | --- | --- | --- |
+| Diez pares p/q con -2<=p<=2 y 1<=q<=2 | 5.551e-17 | 1e-9 | 27 |
+| Nueve pares x,y en {-1/2,0,1/2}, cinco salidas por par | 2.220e-14 | 1e-8 | 203 |
+
+Las cinco salidas son x+y, x*y, -x, x*y-x y x*(x+y). Cada programa se
+inspecciona para verificar que contiene exclusivamente One/Magma y que sus
+dependencias preceden a sus usos. La referencia calcula esas cinco expresiones
+convencionalmente dentro de las pruebas, sin llamar a los constructores EML.
+
+También pasan las pruebas de denominador cero, normalización con extremos
+enteros y presupuesto de síntesis agotado. Las pruebas de evaluación cubren
+argumentos logarítmicos no positivos, desbordamiento, no finitud y límites.
+Estos fallos se devuelven como errores identificables, no como resultados de la
+referencia. Las únicas llamadas trascendentes de producción están en
+`src/eval.rs`; `Node` conserva únicamente One y Magma.
+
+Un fallo en los casos de aceptación bloquea la integración de la red y obliga
+a revisar las expansiones o la decisión numérica. No se añaden primitivas,
+clamps ni sustituciones para conseguir que una prueba pase. Los números
+anteriores son observaciones locales reproducibles mediante el comando, no
+cotas globales de error, tiempo o memoria.
