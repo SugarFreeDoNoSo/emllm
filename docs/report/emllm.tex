@@ -6,7 +6,7 @@
 \usepackage[margin=24mm]{geometry}
 \usepackage{amsmath,amssymb,booktabs,array}
 \usepackage{xcolor,tikz,fancyhdr}
-\usetikzlibrary{arrows.meta,positioning,calc}
+\usetikzlibrary{arrows.meta,positioning,calc,babel}
 \definecolor{ink}{HTML}{17324D}
 \definecolor{accent}{HTML}{087E8B}
 \definecolor{pale}{HTML}{EDF5F7}
@@ -45,7 +45,7 @@ El proyecto propone representar una inferencia neuronal como un programa
 simbólico cerrado con una constante, \(\One\), y una operación binaria,
 \(\Magma\). La semántica adoptada es
 \[
-  \llbracket\One\rrbracket=1,\qquad
+  \operatorname{eval}(\One)=1,\qquad
   \M(x,y)=e^x-\ln y,\quad y>0.
 \]
 Entradas, pesos, sesgos y operaciones de la red deben convertirse a ese
