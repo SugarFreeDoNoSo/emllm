@@ -578,3 +578,44 @@ sin errores, mismas 58 unidades y valores locales idénticos entre ambas y al
 primer reporte. Cambiaron las líneas, no los valores: `compile_nodes` ocupa
 ahora `src/program.rs:157-221`, con máximo local 12. Estos resultados siguen
 siendo evidencia de desarrollo con alcance declarado, no garantías generales.
+
+## Verificación final de tablas de pares (7.1)
+
+El 2026-11-12 se verificó `fb2019f6bb80a669a6cc101911d7384b57c25a22` más el
+ajuste de Clippy en `examples/infer.rs`, con Rust/Cargo 1.92.0 y
+`aarch64-apple-darwin`. La primera ejecución señaló
+`manual_slice_size_calculation`; se sustituyó la multiplicación explícita por
+`size_of_val(program.pairs())`, equivalente al payload `2*M*W`, y se repitieron
+las comprobaciones sobre esas fuentes finales. El ejemplo final tiene SHA-256
+`e9ea98e0f43c532f15b5cacf235fb24f1783537f2021220819cb26c7510bbe97`.
+
+| Comando | Resultado final |
+| --- | --- |
+| `cargo check --all-targets` | Satisfactorio |
+| `cargo test --release` | 37 pruebas y 15 doctests satisfactorios |
+| `cargo test --doc -- --show-output` | 7 controles positivos y 8 `compile_fail` satisfactorios |
+| `cargo fmt --check` | Satisfactorio |
+| `cargo clippy --all-targets -- -D warnings` | Satisfactorio |
+| `cargo run --release --example infer` | Tres fixtures en orden; fórmulas de payload y tolerancia 1e-6 verificadas |
+
+Los diagnósticos negativos se revisaron: E0451 protege los campos de `NodeId`
+y `Program`, E0594 impide escribir pares y raíces, y E0308 rechaza entradas de
+evaluación distintas de `&Program`. Sus controles positivos pasaron. Las pruebas
+cubren procedencia incluso tras liberar la arena, presupuestos 0/1/exactos,
+internado ordenado, copias independientes, snapshots propietarios, remapeo,
+tablas malformadas, 20.000 niveles compartidos, estadísticas y aislamiento.
+
+Se conservan las tolerancias originales: `1e-12` para e, `1e-9` para racionales,
+`1e-8` para operaciones/composiciones y `1e-6` para la red. La demostración
+repite las tuplas V/E/R/D, filas, payloads y errores de la sección de
+[almacenamiento](#payload-estructural-de-pares). El análisis de dependencias
+y fuentes mantiene la biblioteca estándar como única dependencia y la
+referencia convencional exclusivamente en pruebas/ejemplo.
+
+La captura final `target/analysis/pair-final-verification-checked/` conserva
+revisión, diff, fuentes, hashes, comandos y stdout/stderr. La primera ejecución
+permanece en `target/analysis/pair-final-verification/` con su diagnóstico de
+Clippy; no se presenta como un resultado satisfactorio. En 6.2 también pasaron
+la documentación con advertencias denegadas, el ejemplo de arquitectura y
+15 enlaces/anclas locales. Estas comprobaciones son evidencia de desarrollo,
+sin medir memoria total ni tiempo de ejecución.

@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::mem::size_of;
+use std::mem::{size_of, size_of_val};
 
 use emllm::eval::evaluate;
 use emllm::expr::{Arena, Node};
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (program, input) in programs.iter().zip(reference::INPUTS) {
         let stats = program.stats();
         let pair_rows = program.pairs().len();
-        let pair_payload_bytes = pair_rows * pair_bytes;
+        let pair_payload_bytes = size_of_val(program.pairs());
         let tagged_node_payload_model_bytes = program.node_count() * tagged_node_bytes;
         let actual = evaluate(program, evaluation_budget)?[0];
         let expected = reference::infer(input);

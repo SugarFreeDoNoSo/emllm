@@ -33,7 +33,7 @@
 
 ## 7. Integracion y cierre de implementacion
 
-- [ ] 7.1 Ejecutar `cargo test --release`, `cargo test --doc -- --show-output`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` y `cargo run --release --example infer`; verificar regresiones de procedencia, snapshots, errores, estadísticas, racionales, operaciones y red con las tolerancias originales y registrar resultados junto a la evidencia de almacenamiento.
+- [x] 7.1 Ejecutar `cargo test --release`, `cargo test --doc -- --show-output`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` y `cargo run --release --example infer`; verificar regresiones de procedencia, snapshots, errores, estadísticas, racionales, operaciones y red con las tolerancias originales y registrar resultados junto a la evidencia de almacenamiento.
 - [ ] 7.2 Repetir el procedimiento ciclomático documentado por la dependencia con el mismo analizador y alcance, conservando fuentes/metadatos y JSON original; verificar cobertura y comparación de unidades sin doble conteo ni umbrales nuevos, documentando explícitamente cualquier medición no disponible o incompleta. Validar este cambio con `openspec validate use-internal-pair-tables --strict` y confirmar el seguimiento final mediante apply instructions.
 
 ## Flujo de ejecucion
