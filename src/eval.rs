@@ -53,6 +53,8 @@ impl Error for EvalError {}
 /// Evalúa cada nodo compartido una sola vez, en el orden ya compilado.
 /// Solo acepta un [`Program`] validado y su presupuesto explícito; no recibe
 /// raíces adicionales. La respuesta contiene todas las salidas o un error.
+/// Cada llamada posee su buffer de valores y recibe su propio límite; no guarda
+/// cachés, configuración ambiental ni resultados numéricos en el programa.
 ///
 /// ```
 /// use emllm::{eval::evaluate, expr::Arena, program::compile};

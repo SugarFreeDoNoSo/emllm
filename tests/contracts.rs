@@ -129,3 +129,38 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
         })
     );
 }
+
+#[test]
+fn interleaved_evaluations_and_budget_retries_preserve_the_program() {
+    let mut arena = Arena::new(5);
+    let one = arena.one().unwrap();
+    let e = arena.magma(&one, &one).unwrap();
+    let good = compile(&arena, &[e.clone(), one.clone(), e.clone()], 2).unwrap();
+    let ee = arena.magma(&e, &one).unwrap();
+    let large = arena.magma(&ee, &one).unwrap();
+    let overflow = arena.magma(&large, &one).unwrap();
+    let bad = compile(&arena, &[overflow], 5).unwrap();
+    let nodes = good.nodes().to_vec();
+    let roots = good.roots().to_vec();
+    drop(arena);
+
+    for _ in 0..2 {
+        let result = evaluate(&good, 2).unwrap();
+        assert_eq!(result.len(), 3);
+        assert!((result[0] - std::f64::consts::E).abs() <= 1e-12);
+        assert_eq!(result[1], 1.0);
+        assert!((result[2] - std::f64::consts::E).abs() <= 1e-12);
+        assert_eq!(
+            evaluate(&bad, 5).unwrap_err().kind,
+            EvalErrorKind::ExponentialOverflow
+        );
+        assert_eq!(
+            evaluate(&good, 1).unwrap_err().kind,
+            EvalErrorKind::NodeLimit { limit: 1 }
+        );
+    }
+    let retry = evaluate(&good, 2).unwrap();
+    assert!((retry[0] - std::f64::consts::E).abs() <= 1e-12);
+    assert_eq!(good.nodes(), nodes);
+    assert_eq!(good.roots(), roots);
+}
