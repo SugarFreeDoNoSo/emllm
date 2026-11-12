@@ -162,7 +162,10 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(first.magma(&a, &b), Err(BuildError::ForeignReference));
         assert_eq!(first.magma(&b, &a), Err(BuildError::ForeignReference));
-        assert_eq!(first.validate_roots(&[b]), Err(BuildError::ForeignReference));
+        assert_eq!(
+            first.validate_roots(&[b]),
+            Err(BuildError::ForeignReference)
+        );
         assert_eq!(first.nodes.len(), 1);
     }
 
@@ -198,7 +201,10 @@ mod tests {
         let mut arena = Arena::new(2);
         let one = arena.one().unwrap();
         let e = arena.magma(&one, &one).unwrap();
-        assert_eq!(arena.magma(&one, &e), Err(BuildError::NodeLimit { limit: 2 }));
+        assert_eq!(
+            arena.magma(&one, &e),
+            Err(BuildError::NodeLimit { limit: 2 })
+        );
         assert_eq!(arena.one().unwrap(), one);
         assert_eq!(arena.magma(&one, &one).unwrap(), e);
         assert_eq!(arena.nodes(), &[Node::One, Node::Magma(0, 0)]);
