@@ -1,4 +1,4 @@
-use emllm::eval::evaluate;
+use emllm::eval::{EvalError, EvalErrorKind, evaluate};
 use emllm::expr::{Arena, BuildError, Node};
 use emllm::program::{CompileError, compile};
 
@@ -87,4 +87,45 @@ fn inspection_resolves_shared_operands_in_their_own_snapshot() {
     }
     assert!(program.roots().iter().all(|&root| program.node(root).is_some()));
     assert_eq!(program.node(usize::MAX), None);
+}
+
+#[test]
+fn errors_distinguish_stages_and_never_return_partial_outputs() {
+    assert_eq!(Arena::new(0).one(), Err(BuildError::NodeLimit { limit: 0 }));
+    let mut arena = Arena::new(6);
+    let one = arena.one().unwrap();
+    let a = arena.magma(&one, &one).unwrap();
+    let b = arena.magma(&a, &one).unwrap();
+    let c = arena.magma(&b, &one).unwrap();
+    let overflow = arena.magma(&c, &one).unwrap();
+    let dependent = arena.magma(&overflow, &one).unwrap();
+    let roots = [one.clone(), dependent, one];
+    assert!(matches!(
+        compile(&arena, &[], 6),
+        Err(CompileError::Roots(BuildError::EmptyRoots))
+    ));
+    assert!(matches!(
+        compile(&arena, &roots, 0),
+        Err(CompileError::NodeLimit { limit: 0 })
+    ));
+    let program = compile(&arena, &roots, 6).unwrap();
+    assert_eq!(
+        evaluate(&program, 0),
+        Err(EvalError {
+            kind: EvalErrorKind::NodeLimit { limit: 0 },
+            node: None,
+        })
+    );
+    let Node::Magma(failing_node, _) = *program.node(program.roots()[1]).unwrap() else {
+        panic!("expected a dependent Magma");
+    };
+    assert_ne!(failing_node, program.roots()[1]);
+    assert!(matches!(program.node(failing_node), Some(Node::Magma(_, _))));
+    assert_eq!(
+        evaluate(&program, 6),
+        Err(EvalError {
+            kind: EvalErrorKind::ExponentialOverflow,
+            node: Some(failing_node),
+        })
+    );
 }

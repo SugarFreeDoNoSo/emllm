@@ -15,7 +15,7 @@
 ## 3. Evaluacion aislada y composicion
 
 - [x] 3.1 Hacer que la entrada pública de evaluación acepte exclusivamente el programa validado y migrar consumidores y ejemplos de la base; verificar mediante doctests que la ruta válida compila y que pasar una arena o referencia aislada directamente no compila.
-- [ ] 3.2 Consolidar errores distinguibles por etapa y categoría, con identificación de nodo cuando corresponda y éxito solo con todas las salidas; verificar un programa de varias raíces con fallo numérico y errores previos a disponer de nodo, sin resultados parciales exitosos.
+- [x] 3.2 Consolidar errores distinguibles por etapa y categoría, con identificación de nodo cuando corresponda y éxito solo con todas las salidas; verificar un programa de varias raíces con fallo numérico y errores previos a disponer de nodo, sin resultados parciales exitosos.
 - [ ] 3.3 Aislar buffers y configuración por evaluación y conservar presupuestos explícitos; verificar evaluaciones intercaladas, reintento tras presupuesto insuficiente y preservación de raíces y nodos, usando tolerancias de fixtures en lugar de exigir igualdad bit a bit de trascendentes.
 - [ ] 3.4 Verificar la separación estructural/numérica con las expresiones de dominio negativo y desbordamiento descritas en `design.md`; comprobar que ambas compilan estructuralmente, fallan en evaluación con la categoría y nodo esperados y siguen siendo inspeccionables después del fallo.
 - [ ] 3.5 Consolidar las dependencias de expresiones, síntesis, programa, evaluación y red, conservando los nombres coherentes de la base; verificar por revisión de imports y llamadas que síntesis y compilación no ejecutan el evaluador y que la referencia convencional solo se usa en pruebas/demostración.
