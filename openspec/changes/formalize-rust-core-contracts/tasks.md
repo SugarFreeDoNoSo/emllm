@@ -40,3 +40,11 @@
 
 - [ ] 6.1 Enlazar ambas guías desde README y verificar que sus nombres de API, rutas y comandos corresponden a los entregables reales, que cubren los escenarios de las dos especificaciones nuevas y que identifican las limitaciones numéricas y de medición.
 - [ ] 6.2 Ejecutar `cargo test --release`, `cargo test --doc`, `cargo fmt --check` y `cargo clippy --all-targets -- -D warnings`; comprobar que pasan los contratos nuevos y las regresiones de racionales, operaciones y red de `implement-one-magma-eml`, y registrar los resultados junto al reporte de complejidad.
+
+## Flujo de ejecución
+
+1. Usar `develop` como única rama de desarrollo para las tareas de `implement-one-magma-eml` y `formalize-rust-core-contracts`.
+2. Completar y verificar primero `implement-one-magma-eml`; continuar después con `formalize-rust-core-contracts` sobre esa misma rama.
+3. Crear un commit por tarea completada y verificada, incluyendo sus cambios y la actualización de su casilla en `tasks.md`. Completar ese commit antes de avanzar a la siguiente tarea.
+4. Identificar el cambio y el número de tarea en cada mensaje de commit; formato de referencia: `<tipo>(<cambio>): tarea <X.Y> - <resumen>`.
+5. Publicar los avances en `origin/develop` y revisar con el usuario antes de realizar el merge a `main`.
