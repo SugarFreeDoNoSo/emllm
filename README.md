@@ -3,12 +3,75 @@
 Redes neuronales expresadas únicamente con **One** y **Magma**, donde
 `Magma(x, y) = exp(x) - ln(y)` y `y > 0`.
 
-El proyecto está en fase de diseño: la primera implementación propuesta es un
-núcleo Rust y una red 2-2-1 cuyos pesos, entradas y operaciones se expanden a
-One/Magma. La planificación está en
+El núcleo Rust construye DAGs cerrados, los compila en orden topológico y los
+evalúa en `f64`. Incluye síntesis racional acotada y una red 2-2-1 cuyos pesos,
+entradas, sesgos y operaciones se expanden a One/Magma antes de evaluar.
+La planificación y el seguimiento están en
 [`openspec/changes/implement-one-magma-eml/`](openspec/changes/implement-one-magma-eml/).
 
-## Informe técnico
+## Ejecutar y verificar el núcleo
+
+Requiere Rust con soporte para edición 2024. Verificado localmente con
+`rustc 1.92.0 (ded5c06cf 2025-12-08)` en `aarch64-apple-darwin`.
+La biblioteca usa únicamente la biblioteca estándar.
+
+Desde la raíz del repositorio:
+
+```sh
+cargo check
+cargo test --release
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo run --release --example infer
+```
+
+La demostración construye los tres programas completos antes de evaluarlos.
+Usa presupuestos explícitos de 100.000 nodos para construcción, compilación y
+evaluación; informa los nodos alcanzables, la referencia independiente, el error
+absoluto y la tolerancia. Termina con error si una fixture no satisface `1e-6`.
+
+Resultados locales de la demostración en release:
+
+| Entrada | Salida EML | Nodos alcanzables | Error absoluto observado |
+| --- | --- | --- | --- |
+| `[0, 0]` | 0.110599608464273 | 614 | 2.426e-14 |
+| `[1/2, -1/2]` | 0.104508979170250 | 676 | 9.104e-15 |
+| `[-1/2, 1/2]` | -0.080306139871040 | 676 | 4.829e-15 |
+
+La arena compartida contiene 1.684 nodos después de construir las tres entradas.
+Estos resultados proceden de este motor, no de un prototipo externo. Son
+observaciones de las fixtures y del entorno indicado, no garantías generales de
+precisión o rendimiento.
+
+## Modelo y límites
+
+- `expr`: arena append-only, referencias propias de una arena, internado por
+  estructura y orden de operandos, inspección y presupuesto de construcción.
+- `program`: validación y snapshot de nodos alcanzables. El recorrido es
+  iterativo; las raíces conservan orden y duplicados. Construir una entrada
+  nueva no modifica programas ya compilados.
+- `synth`: racionales normalizados con `abs(p)<=2` y `1<=q<=2`, suma, negación,
+  resta y producto mediante las [expansiones derivadas](docs/synthesis.md).
+  Los enteros de la frontera son metadatos, nunca hojas ejecutables.
+- `eval`: únicamente One y Magma. Los fallos de dominio, desbordamiento, no
+  finitud y presupuesto se devuelven como errores identificables; los fallos
+  numéricos señalan el nodo del programa compilado.
+- `network`: red 2-2-1 con activación `exp(-z*z)`, parámetros racionales y
+  validación de dimensiones antes de construir. La referencia convencional
+  está fuera de la biblioteca, en pruebas y demostración.
+
+Una estructura válida no certifica la validez numérica. `f64` puede sufrir
+cancelación, subdesbordamiento y desbordamiento de intermedios, incluso cuando
+el resultado real final sea pequeño. No se aplican clamps ni sustituciones por
+aritmética convencional. Las tolerancias comprobadas son `1e-9` para los
+racionales iniciales, `1e-8` para las operaciones escalares documentadas y `1e-6`
+para las tres fixtures neuronales. No se promete precisión arbitraria,
+aceleración, entrenamiento ni escalado a redes grandes.
+
+## Informe técnico conceptual
+
+El informe y el resumen visual recogen el diseño inicial; el estado de la
+implementación y sus resultados locales se describen en las secciones anteriores.
 
 - [Resumen visual en GitHub Pages](https://sugarfreedonoso.github.io/emllm/).
 - [Fuente LaTeX con diagramas TikZ](docs/report/emllm.tex).
