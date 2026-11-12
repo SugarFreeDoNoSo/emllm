@@ -79,3 +79,27 @@ fn all_three_fixtures_match_the_independent_reference() {
         }
     }
 }
+
+#[test]
+fn new_inputs_preserve_previous_closed_programs() {
+    let network = Network221::fixture();
+    let inputs = inputs();
+    let mut arena = Arena::new(100_000);
+    let first_root = network.build(&mut arena, &inputs[0]).unwrap();
+    let first = compile(&arena, std::slice::from_ref(&first_root), 100_000).unwrap();
+    let original_nodes = first.nodes().to_vec();
+    let second_root = network.build(&mut arena, &inputs[1]).unwrap();
+    assert_ne!(first_root, second_root);
+    let second = compile(&arena, &[second_root], 100_000).unwrap();
+    let first_again = compile(&arena, &[first_root], 100_000).unwrap();
+    assert_eq!(first.nodes(), original_nodes);
+    assert_eq!(first_again.nodes(), original_nodes);
+    assert_eq!(first_again.roots(), first.roots());
+    drop(arena);
+    for program in [first, first_again] {
+        let actual = evaluate(&program, 100_000).unwrap()[0];
+        assert!((actual - reference::infer(reference::INPUTS[0])).abs() <= 1e-6);
+    }
+    let actual = evaluate(&second, 100_000).unwrap()[0];
+    assert!((actual - reference::infer(reference::INPUTS[1])).abs() <= 1e-6);
+}
