@@ -179,7 +179,10 @@ fn compile_nodes(
                         let left = remapped[&left];
                         let right = remapped[&right];
                         edges += 2;
-                        (Node::Magma(left, right), 1 + depths[left].max(depths[right]))
+                        (
+                            Node::Magma(left, right),
+                            1 + depths[left].max(depths[right]),
+                        )
                     }
                 };
                 remapped.insert(index, nodes.len());

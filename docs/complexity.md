@@ -479,3 +479,37 @@ Para comparar dos capturas reales:
 Esta comparación es evidencia para la revisión, sin umbrales automáticos de
 aceptación. Cambiar únicamente las entradas neuronales modifica el DAG y sus
 valores, pero no las métricas del código de una misma revisión del evaluador.
+
+## Verificación final de los contratos (6.2)
+
+Verificación del 2026-11-12 con Rust 1.92.0, `aarch64-apple-darwin`, sobre
+`e1d22996cbedaf256b5349cd49ae155919dee3fa` más los ajustes de formato de
+`src/program.rs`, `tests/contracts.rs` y `examples/infer.rs` conservados en el
+diff. El primer control de formato señaló esas tres diferencias; se aplicó el
+formato requerido y se repitieron las comprobaciones sobre las fuentes finales.
+
+| Comando | Resultado final |
+| --- | --- |
+| `cargo check` | Satisfactorio |
+| `cargo test --release` | 29 pruebas y 12 doctests satisfactorios |
+| `cargo test --doc -- --show-output` | 5 controles positivos y 7 `compile_fail` satisfactorios |
+| `cargo fmt --check` | Satisfactorio |
+| `cargo clippy --all-targets -- -D warnings` | Satisfactorio |
+| `cargo run --release --example infer` | Tres salidas en orden, todas dentro de `1e-6` |
+
+Se revisaron los diagnósticos negativos: E0451 para campos privados, E0594 para
+mutación de vistas compartidas y E0308 para entradas distintas de `Program`.
+Los contratos de procedencia, snapshot, errores, aislamiento y estadísticas,
+y las regresiones de racionales, operaciones y red pasaron. La demostración
+conservó las tuplas V/E/R/D y errores de la tabla neuronal anterior. En 6.1
+también pasó `RUSTDOCFLAGS='-D warnings' cargo doc --no-deps` y se comprobaron
+los enlaces locales de README y ambas guías.
+
+Los logs, argv, revisión y diff de las comprobaciones finales están en
+`target/analysis/final-verification-formatted/`. Las capturas
+`target/analysis/core-final/` y `target/analysis/core-final-repeat/` incluyen
+fuentes formateadas, hashes, cambios locales y JSON originales: cobertura 6/6
+sin errores, mismas 58 unidades y valores locales idénticos entre ambas y al
+primer reporte. Cambiaron las líneas, no los valores: `compile_nodes` ocupa
+ahora `src/program.rs:157-221`, con máximo local 12. Estos resultados siguen
+siendo evidencia de desarrollo con alcance declarado, no garantías generales.

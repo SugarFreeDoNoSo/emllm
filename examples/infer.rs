@@ -31,7 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         "budgets (nodes): build={build_budget}, compile={compile_budget}, evaluation={evaluation_budget}; arena_nodes={}",
         arena.nodes().len()
     );
-    println!("per-program graph: V=unique_nodes, E=operand_links, R=root_positions, D=depth_in_links");
+    println!(
+        "per-program graph: V=unique_nodes, E=operand_links, R=root_positions, D=depth_in_links"
+    );
     for (program, input) in programs.iter().zip(reference::INPUTS) {
         let stats = program.stats();
         let actual = evaluate(program, evaluation_budget)?[0];

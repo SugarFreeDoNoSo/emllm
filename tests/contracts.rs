@@ -85,7 +85,12 @@ fn inspection_resolves_shared_operands_in_their_own_snapshot() {
             assert!(program.node(*right).is_some());
         }
     }
-    assert!(program.roots().iter().all(|&root| program.node(root).is_some()));
+    assert!(
+        program
+            .roots()
+            .iter()
+            .all(|&root| program.node(root).is_some())
+    );
     assert_eq!(program.node(usize::MAX), None);
 }
 
@@ -120,7 +125,10 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
         panic!("expected a dependent Magma");
     };
     assert_ne!(failing_node, program.roots()[1]);
-    assert!(matches!(program.node(failing_node), Some(Node::Magma(_, _))));
+    assert!(matches!(
+        program.node(failing_node),
+        Some(Node::Magma(_, _))
+    ));
     assert_eq!(
         evaluate(&program, 6),
         Err(EvalError {
