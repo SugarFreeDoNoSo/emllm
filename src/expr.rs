@@ -39,6 +39,7 @@ pub enum BuildError {
     ForeignReference,
     InvalidReference { index: usize },
     EmptyRoots,
+    NodeLimit { limit: usize },
 }
 
 impl fmt::Display for BuildError {
@@ -47,6 +48,7 @@ impl fmt::Display for BuildError {
             Self::ForeignReference => write!(f, "reference belongs to another arena"),
             Self::InvalidReference { index } => write!(f, "invalid node reference {index}"),
             Self::EmptyRoots => write!(f, "at least one root is required"),
+            Self::NodeLimit { limit } => write!(f, "construction node budget {limit} exhausted"),
         }
     }
 }
@@ -59,21 +61,27 @@ pub struct Arena {
     identity: Arc<()>,
     nodes: Vec<Node>,
     interned: HashMap<Node, usize>,
-}
-
-impl Default for Arena {
-    fn default() -> Self {
-        Self::new()
-    }
+    max_nodes: usize,
 }
 
 impl Arena {
-    pub fn new() -> Self {
+    /// El presupuesto cuenta nodos únicos de toda la arena, no sus usos.
+    pub fn new(max_nodes: usize) -> Self {
         Self {
             identity: Arc::new(()),
             nodes: Vec::new(),
             interned: HashMap::new(),
+            max_nodes,
         }
+    }
+
+    /// Inspección de solo lectura, en orden de construcción, sin evaluación.
+    pub fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
+
+    pub fn node_limit(&self) -> usize {
+        self.max_nodes
     }
 
     pub fn one(&mut self) -> Result<NodeId, BuildError> {
@@ -110,6 +118,11 @@ impl Arena {
         let index = if let Some(&index) = self.interned.get(&node) {
             index
         } else {
+            if self.nodes.len() >= self.max_nodes {
+                return Err(BuildError::NodeLimit {
+                    limit: self.max_nodes,
+                });
+            }
             let index = self.nodes.len();
             self.nodes.push(node);
             self.interned.insert(node, index);
@@ -128,7 +141,7 @@ mod tests {
 
     #[test]
     fn interns_structure_and_preserves_operand_order() {
-        let mut arena = Arena::new();
+        let mut arena = Arena::new(10);
         let one = arena.one().unwrap();
         assert_eq!(one, arena.one().unwrap());
         let e = arena.magma(&one, &one).unwrap();
@@ -141,8 +154,8 @@ mod tests {
 
     #[test]
     fn rejects_foreign_operands_and_roots_even_at_the_same_index() {
-        let mut first = Arena::new();
-        let mut second = Arena::new();
+        let mut first = Arena::new(10);
+        let mut second = Arena::new(10);
         let a = first.one().unwrap();
         let b = second.one().unwrap();
         assert_eq!(a.index(), b.index());
@@ -155,7 +168,7 @@ mod tests {
 
     #[test]
     fn future_references_cannot_introduce_cycles() {
-        let mut arena = Arena::new();
+        let mut arena = Arena::new(101);
         let one = arena.one().unwrap();
         let future = NodeId {
             arena: arena.identity.clone(),
@@ -174,5 +187,40 @@ mod tests {
         }
         assert!(arena.validate_roots(&[previous]).is_ok());
         assert_eq!(arena.validate_roots(&[]), Err(BuildError::EmptyRoots));
+    }
+
+    #[test]
+    fn enforces_budget_without_charging_reused_nodes() {
+        let mut empty = Arena::new(0);
+        assert_eq!(empty.one(), Err(BuildError::NodeLimit { limit: 0 }));
+        assert!(empty.nodes().is_empty());
+
+        let mut arena = Arena::new(2);
+        let one = arena.one().unwrap();
+        let e = arena.magma(&one, &one).unwrap();
+        assert_eq!(arena.magma(&one, &e), Err(BuildError::NodeLimit { limit: 2 }));
+        assert_eq!(arena.one().unwrap(), one);
+        assert_eq!(arena.magma(&one, &one).unwrap(), e);
+        assert_eq!(arena.nodes(), &[Node::One, Node::Magma(0, 0)]);
+    }
+
+    #[test]
+    fn inspection_contains_only_closed_acyclic_nodes() {
+        let mut arena = Arena::new(1000);
+        let one = arena.one().unwrap();
+        let mut previous = one.clone();
+        for _ in 0..999 {
+            previous = arena.magma(&previous, &one).unwrap();
+        }
+        for (index, node) in arena.nodes().iter().enumerate() {
+            match node {
+                Node::One => assert_eq!(index, 0),
+                Node::Magma(left, right) => {
+                    assert!(*left < index);
+                    assert!(*right < index);
+                }
+            }
+        }
+        assert_eq!(arena.nodes().len(), arena.node_limit());
     }
 }
