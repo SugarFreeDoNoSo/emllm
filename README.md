@@ -24,6 +24,12 @@ Sus cifras describen código fuente; V/E/R/D describen el DAG y los errores
 numéricos describen las fixtures. Ninguna de estas métricas, por sí sola,
 demuestra rendimiento, memoria real, precisión general o cumplimiento de SOLID.
 
+La inspección de `Arena` y `Program` devuelve `Node` por copia: `node(index)`
+produce `Option<Node>` y `nodes()` un iterador de longitud exacta. Usar
+`node_count()` para presupuestos, `.nodes()` en lugar de `.nodes().iter()` y
+`.nodes().collect::<Vec<_>>()` si el consumidor necesita una colección propia.
+Esta adaptación sustituye las firmas anteriores basadas en slices/referencias.
+
 ## Ejecutar y verificar el núcleo
 
 Requiere Rust con soporte para edición 2024. Verificado localmente con

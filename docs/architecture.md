@@ -30,8 +30,11 @@ Rational / Network221 → Arena + NodeId → compile → Program
 - `Program` tiene campos privados y posee el snapshot. Se puede ampliar o liberar
   la arena sin alterarlo. `Clone` copia un programa ya válido, con coste lineal;
   distintos snapshots pueden duplicar almacenamiento.
-- `Program::nodes()` y `roots()` devuelven vistas inmutables. `node(index)`
-  resuelve una posición del snapshot o devuelve `None`. Los índices de operandos,
+- `Arena::nodes()` y `Program::nodes()` devuelven iteradores de longitud exacta
+  con valores `Node`; `node(index)` devuelve `Option<Node>` por copia y
+  `node_count()` cuenta nodos lógicos. Estas consultas no asignan una colección
+  de nodos y cambiar una copia no modifica la estructura. `Program::roots()`
+  conserva su slice inmutable. Los índices de operandos,
   raíces y errores son locales al programa que los publicó: no son `NodeId`,
    identificadores persistentes ni referencias intercambiables entre snapshots.
 - `Program::stats()` consulta en O(1) los conteos V/E/R/D calculados al compilar.

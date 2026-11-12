@@ -42,7 +42,7 @@ fn statistics_exclude_arena_history_and_survive_its_destruction() {
     assert_eq!(program.stats(), &expected);
     let more = arena.magma(&unused, &one).unwrap();
     arena.magma(&more, &one).unwrap();
-    assert_eq!(arena.nodes().len(), 5);
+    assert_eq!(arena.node_count(), 5);
     assert_eq!(program.stats(), &expected);
     drop(arena);
     assert_eq!(program.stats(), &expected);

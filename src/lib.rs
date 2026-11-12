@@ -22,14 +22,15 @@
 //! let e = arena.magma(&one, &one)?;
 //! let repeated = arena.magma(&one, &one)?;
 //! assert_eq!(e, repeated);
-//! assert_eq!(arena.nodes().len(), 2);
-//! assert_eq!(arena.nodes()[e.index()], Node::Magma(one.index(), one.index()));
+//! assert_eq!(arena.node_count(), 2);
+//! assert_eq!(arena.node(e.index()), Some(Node::Magma(one.index(), one.index())));
 //! arena.validate_roots(&[e])?;
 //! # Ok::<(), emllm::expr::BuildError>(())
 //! ```
 //!
 //! Los índices observados son locales: no permiten fabricar referencias válidas
-//! para otra arena. La inspección devuelve una vista de solo lectura.
+//! para otra arena. La inspección devuelve nodos por copia e iteradores de
+//! longitud exacta; cambiar una copia no modifica la estructura.
 //!
 //! # Compilación y propiedad
 //!

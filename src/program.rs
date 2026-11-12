@@ -23,7 +23,7 @@ pub use crate::expr::Node;
 /// let program = compile(&arena, std::slice::from_ref(&root), 2).unwrap();
 /// arena.magma(&root, &one).unwrap();
 /// drop(arena);
-/// assert_eq!(program.nodes(), &[Node::One, Node::Magma(0, 0)]);
+/// assert!(program.nodes().eq([Node::One, Node::Magma(0, 0)]));
 /// assert_eq!(program.roots(), &[1]);
 /// assert!((evaluate(&program, 2).unwrap()[0] - std::f64::consts::E).abs() <= 1e-12);
 /// ```
@@ -38,14 +38,14 @@ pub use crate::expr::Node;
 /// let invalid = Program { nodes: vec![Node::Magma(99, 99)], ..program };
 /// ```
 ///
-/// Ni los nodos ni las raíces ofrecen acceso mutable:
+/// Ni el almacenamiento privado ni las raíces ofrecen acceso mutable:
 ///
 /// ```compile_fail
 /// use emllm::{expr::{Arena, Node}, program::compile};
 /// let mut arena = Arena::new(1);
 /// let one = arena.one().unwrap();
 /// let mut program = compile(&arena, &[one], 1).unwrap();
-/// program.nodes()[0] = Node::Magma(99, 99);
+/// program.nodes[0] = Node::Magma(99, 99);
 /// ```
 ///
 /// ```compile_fail
@@ -94,17 +94,23 @@ impl Program {
         &self.stats
     }
 
-    /// Vista inmutable en orden de evaluación. Sus posiciones identifican nodos
-    /// únicamente dentro de este snapshot, incluidos los operandos de Magma.
-    pub fn nodes(&self) -> &[Node] {
-        &self.nodes
+    /// Número lógico de nodos del snapshot, incluido One.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Copias en orden de evaluación, sin asignar una colección de nodos.
+    /// Sus posiciones y operandos son locales a este snapshot.
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = Node> + '_ {
+        self.nodes.iter().copied()
     }
 
     /// Resuelve una posición de raíz, operando o diagnóstico en este programa.
     /// No acepta un handle de construcción [`NodeId`]; sus índices pueden haber
     /// sido remapeados. Un índice fuera del snapshot devuelve `None`.
-    pub fn node(&self, index: usize) -> Option<&Node> {
-        self.nodes.get(index)
+    /// Modificar la copia devuelta no cambia el programa.
+    pub fn node(&self, index: usize) -> Option<Node> {
+        self.nodes.get(index).copied()
     }
 
     /// Posiciones del snapshot, en el orden solicitado y conservando duplicados.
@@ -151,11 +157,11 @@ impl Error for CompileError {
 pub fn compile(arena: &Arena, roots: &[NodeId], max_nodes: usize) -> Result<Program, CompileError> {
     arena.validate_roots(roots).map_err(CompileError::Roots)?;
     let roots: Vec<_> = roots.iter().map(NodeId::index).collect();
-    compile_nodes(arena.nodes(), &roots, max_nodes)
+    compile_nodes(|index| arena.node(index), &roots, max_nodes)
 }
 
 fn compile_nodes(
-    source: &[Node],
+    source: impl Fn(usize) -> Option<Node>,
     roots: &[usize],
     max_nodes: usize,
 ) -> Result<Program, CompileError> {
@@ -169,9 +175,7 @@ fn compile_nodes(
     for &root in roots {
         stack.push((root, false));
         while let Some((index, exiting)) = stack.pop() {
-            let node = *source
-                .get(index)
-                .ok_or(CompileError::InvalidReference { index })?;
+            let node = source(index).ok_or(CompileError::InvalidReference { index })?;
             if exiting {
                 let (compiled, depth) = match node {
                     Node::One => (Node::One, 0),
@@ -227,15 +231,19 @@ mod tests {
     #[test]
     fn rejects_malformed_graphs() {
         assert!(matches!(
-            compile_nodes(&[Node::Magma(0, 0)], &[0], 10),
+            compile_nodes(|i| [Node::Magma(0, 0)].get(i).copied(), &[0], 10),
             Err(CompileError::Cycle { index: 0 })
         ));
         assert!(matches!(
-            compile_nodes(&[Node::Magma(1, 2), Node::One], &[0], 10),
+            compile_nodes(|i| [Node::Magma(1, 2), Node::One].get(i).copied(), &[0], 10),
             Err(CompileError::InvalidReference { index: 2 })
         ));
         assert!(matches!(
-            compile_nodes(&[Node::Magma(1, 1), Node::Magma(0, 0)], &[0], 10),
+            compile_nodes(
+                |i| [Node::Magma(1, 1), Node::Magma(0, 0)].get(i).copied(),
+                &[0],
+                10
+            ),
             Err(CompileError::Cycle { .. })
         ));
     }
@@ -250,7 +258,7 @@ mod tests {
         }
         let program = compile(&arena, &[root], 20_001).unwrap();
         drop(arena);
-        assert_eq!(program.nodes().len(), 20_001);
+        assert_eq!(program.node_count(), 20_001);
         assert_eq!(
             program.stats(),
             &ProgramStats {
@@ -260,9 +268,9 @@ mod tests {
                 depth: 20_000,
             }
         );
-        for (index, node) in program.nodes().iter().enumerate() {
+        for (index, node) in program.nodes().enumerate() {
             if let Node::Magma(left, right) = node {
-                assert!(*left < index && *right < index);
+                assert!(left < index && right < index);
             }
         }
     }
@@ -273,7 +281,7 @@ mod tests {
         let one = arena.one().unwrap();
         let e = arena.magma(&one, &one).unwrap();
         arena.magma(&e, &one).unwrap();
-        assert_eq!(compile(&arena, &[one], 1).unwrap().nodes().len(), 1);
+        assert_eq!(compile(&arena, &[one], 1).unwrap().node_count(), 1);
         assert!(matches!(
             compile(&arena, &[e], 1),
             Err(CompileError::NodeLimit { limit: 1 })

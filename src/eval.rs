@@ -101,15 +101,15 @@ impl Error for EvalError {}
 /// evaluate(&nodes, 1);
 /// ```
 pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalError> {
-    if program.nodes().len() > max_nodes {
+    if program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },
             node: None,
         });
     }
-    let mut values: Vec<f64> = Vec::with_capacity(program.nodes().len());
-    for (index, node) in program.nodes().iter().enumerate() {
-        let value = match *node {
+    let mut values: Vec<f64> = Vec::with_capacity(program.node_count());
+    for (index, node) in program.nodes().enumerate() {
+        let value = match node {
             Node::One => 1.0,
             Node::Magma(left, right) => magma_value(values[left], values[right], index)?,
         };

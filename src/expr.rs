@@ -102,9 +102,20 @@ impl Arena {
         }
     }
 
-    /// Inspección de solo lectura, en orden de construcción, sin evaluación.
-    pub fn nodes(&self) -> &[Node] {
-        &self.nodes
+    /// Nodos lógicos únicos, incluidos One y los Magma construidos.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Inspección por copia en orden de construcción, sin asignar una colección.
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = Node> + '_ {
+        self.nodes.iter().copied()
+    }
+
+    /// Copia de un nodo local; modificarla no altera la arena.
+    /// Devuelve `None` para cualquier índice fuera de rango.
+    pub fn node(&self, index: usize) -> Option<Node> {
+        self.nodes.get(index).copied()
     }
 
     pub fn node_limit(&self) -> usize {
@@ -225,7 +236,7 @@ mod tests {
     fn enforces_budget_without_charging_reused_nodes() {
         let mut empty = Arena::new(0);
         assert_eq!(empty.one(), Err(BuildError::NodeLimit { limit: 0 }));
-        assert!(empty.nodes().is_empty());
+        assert_eq!(empty.node_count(), 0);
 
         let mut arena = Arena::new(2);
         let one = arena.one().unwrap();
@@ -236,7 +247,7 @@ mod tests {
         );
         assert_eq!(arena.one().unwrap(), one);
         assert_eq!(arena.magma(&one, &one).unwrap(), e);
-        assert_eq!(arena.nodes(), &[Node::One, Node::Magma(0, 0)]);
+        assert!(arena.nodes().eq([Node::One, Node::Magma(0, 0)]));
     }
 
     #[test]
@@ -247,15 +258,15 @@ mod tests {
         for _ in 0..999 {
             previous = arena.magma(&previous, &one).unwrap();
         }
-        for (index, node) in arena.nodes().iter().enumerate() {
+        for (index, node) in arena.nodes().enumerate() {
             match node {
                 Node::One => assert_eq!(index, 0),
                 Node::Magma(left, right) => {
-                    assert!(*left < index);
-                    assert!(*right < index);
+                    assert!(left < index);
+                    assert!(right < index);
                 }
             }
         }
-        assert_eq!(arena.nodes().len(), arena.node_limit());
+        assert_eq!(arena.node_count(), arena.node_limit());
     }
 }

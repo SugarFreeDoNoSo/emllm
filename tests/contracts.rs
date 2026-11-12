@@ -22,7 +22,7 @@ fn construction_handles_keep_their_provenance_after_the_arena_is_dropped() {
         compile(&receiver, std::slice::from_ref(&foreign), 2),
         Err(CompileError::Roots(BuildError::ForeignReference))
     ));
-    assert_eq!(receiver.nodes().len(), 1);
+    assert_eq!(receiver.node_count(), 1);
 
     let mut replacement = Arena::new(1);
     let new = replacement.one().unwrap();
@@ -42,10 +42,10 @@ fn compilation_preserves_root_positions_and_sharing_within_its_budget() {
     arena.magma(&t, &one).unwrap(); // No alcanzable desde las raíces seleccionadas.
     let roots = [t.clone(), one, t];
     let program = compile(&arena, &roots, 2).unwrap();
-    assert_eq!(program.nodes(), &[Node::One, Node::Magma(0, 0)]);
+    assert!(program.nodes().eq([Node::One, Node::Magma(0, 0)]));
     assert_eq!(program.roots(), &[1, 0, 1]);
     let repeated = compile(&arena, &roots, 2).unwrap();
-    assert_eq!(program.nodes(), repeated.nodes());
+    assert!(program.nodes().eq(repeated.nodes()));
     assert_eq!(program.roots(), repeated.roots());
     let values = evaluate(&program, 2).unwrap();
     assert_eq!(values.len(), 3);
@@ -72,17 +72,17 @@ fn inspection_resolves_shared_operands_in_their_own_snapshot() {
     let program = compile(&arena, std::slice::from_ref(&root), 3).unwrap();
     let compiled_root = program.roots()[0];
     assert_ne!(compiled_root, root.index());
-    let Node::Magma(left, right) = *program.node(compiled_root).unwrap() else {
+    let Node::Magma(left, right) = program.node(compiled_root).unwrap() else {
         panic!("expected a shared Magma root");
     };
     assert_eq!(left, right);
-    assert_eq!(program.node(left), Some(&Node::Magma(0, 0)));
-    for (index, node) in program.nodes().iter().enumerate() {
+    assert_eq!(program.node(left), Some(Node::Magma(0, 0)));
+    for (index, node) in program.nodes().enumerate() {
         assert_eq!(program.node(index), Some(node));
         if let Node::Magma(left, right) = node {
-            assert!(*left < index && *right < index);
-            assert!(program.node(*left).is_some());
-            assert!(program.node(*right).is_some());
+            assert!(left < index && right < index);
+            assert!(program.node(left).is_some());
+            assert!(program.node(right).is_some());
         }
     }
     assert!(
@@ -121,7 +121,7 @@ fn errors_distinguish_stages_and_never_return_partial_outputs() {
             node: None,
         })
     );
-    let Node::Magma(failing_node, _) = *program.node(program.roots()[1]).unwrap() else {
+    let Node::Magma(failing_node, _) = program.node(program.roots()[1]).unwrap() else {
         panic!("expected a dependent Magma");
     };
     assert_ne!(failing_node, program.roots()[1]);
@@ -148,7 +148,7 @@ fn interleaved_evaluations_and_budget_retries_preserve_the_program() {
     let large = arena.magma(&ee, &one).unwrap();
     let overflow = arena.magma(&large, &one).unwrap();
     let bad = compile(&arena, &[overflow], 5).unwrap();
-    let nodes = good.nodes().to_vec();
+    let nodes = good.nodes().collect::<Vec<_>>();
     let roots = good.roots().to_vec();
     drop(arena);
 
@@ -169,6 +169,6 @@ fn interleaved_evaluations_and_budget_retries_preserve_the_program() {
     }
     let retry = evaluate(&good, 2).unwrap();
     assert!((retry[0] - std::f64::consts::E).abs() <= 1e-12);
-    assert_eq!(good.nodes(), nodes);
+    assert_eq!(good.nodes().collect::<Vec<_>>(), nodes);
     assert_eq!(good.roots(), roots);
 }
