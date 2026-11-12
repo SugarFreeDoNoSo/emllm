@@ -29,7 +29,7 @@
 
 ## 5. Validación conjunta
 
-- [ ] 5.1 Ejecutar cargo test --release, cargo fmt --check y cargo clippy --all-targets -- -D warnings; verificar que pasan y que la demostración completa satisface ambas especificaciones.
+- [x] 5.1 Ejecutar cargo test --release, cargo fmt --check y cargo clippy --all-targets -- -D warnings; verificar que pasan y que la demostración completa satisface ambas especificaciones.
 
 ## Flujo de ejecución
 
