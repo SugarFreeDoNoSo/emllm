@@ -19,7 +19,7 @@
 - [x] 3.3 Aislar buffers y configuración por evaluación y conservar presupuestos explícitos; verificar evaluaciones intercaladas, reintento tras presupuesto insuficiente y preservación de raíces y nodos, usando tolerancias de fixtures en lugar de exigir igualdad bit a bit de trascendentes.
 - [x] 3.4 Verificar la separación estructural/numérica con las expresiones de dominio negativo y desbordamiento descritas en `design.md`; comprobar que ambas compilan estructuralmente, fallan en evaluación con la categoría y nodo esperados y siguen siendo inspeccionables después del fallo.
 - [x] 3.5 Consolidar las dependencias de expresiones, síntesis, programa, evaluación y red, conservando los nombres coherentes de la base; verificar por revisión de imports y llamadas que síntesis y compilación no ejecutan el evaluador y que la referencia convencional solo se usa en pruebas/demostración.
-- [ ] 3.6 Crear `docs/architecture.md` y la documentación de errores de la API con los contratos y criterios SRP, OCP, LSP, ISP y DIP; verificar que explican enum cerrado, composición funcional, encapsulación, elección justificada de traits y límites de pureza/precisión de `f64` con ejemplos alineados con la API real.
+- [x] 3.6 Crear `docs/architecture.md` y la documentación de errores de la API con los contratos y criterios SRP, OCP, LSP, ISP y DIP; verificar que explican enum cerrado, composición funcional, encapsulación, elección justificada de traits y límites de pureza/precisión de `f64` con ejemplos alineados con la API real.
 
 ## 4. Inspeccion y reporte del programa
 

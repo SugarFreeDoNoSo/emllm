@@ -54,6 +54,9 @@ impl PartialEq for NodeId {
 
 impl Eq for NodeId {}
 
+/// Fallos de construcción o selección de raíces, distinguibles sin leer texto.
+/// `InvalidReference` identifica una posición de arena; los demás no inventan
+/// un nodo. Un error no entrega un handle nuevo como éxito.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BuildError {
     ForeignReference,

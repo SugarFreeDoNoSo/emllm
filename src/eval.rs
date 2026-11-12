@@ -28,13 +28,19 @@ use crate::program::{Node, Program};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EvalErrorKind {
+    /// El segundo operando es cero o negativo.
     LogDomain,
+    /// La exponencial de un operando finito no es finita.
     ExponentialOverflow,
+    /// Un operando o resultado no es finito.
     NonFinite,
+    /// Rechazo previo a ejecutar nodos.
     NodeLimit { limit: usize },
 }
 
 /// `node` identifica una posición de `Program::nodes()`, no de la arena original.
+/// Es `Some` para fallos numéricos y `None` para el rechazo previo de presupuesto.
+/// Resuélvase con [`Program::node`] sobre el programa de esta evaluación.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
@@ -54,6 +60,12 @@ impl Error for EvalError {}
 /// raíces adicionales. La respuesta contiene todas las salidas o un error.
 /// Cada llamada posee su buffer de valores y recibe su propio límite; no guarda
 /// cachés, configuración ambiental ni resultados numéricos en el programa.
+///
+/// # Errors
+///
+/// Devuelve [`EvalErrorKind::NodeLimit`] antes de ejecutar si el presupuesto es
+/// insuficiente. La primera operación inválida devuelve dominio, desbordamiento
+/// o no finitud con su índice; no devuelve salidas parciales como éxito.
 ///
 /// ```
 /// use emllm::{eval::evaluate, expr::Arena, program::compile};

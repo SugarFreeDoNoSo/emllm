@@ -16,6 +16,7 @@ pub struct Rational {
     denominator: u32,
 }
 
+/// Rechazo de metadatos antes de sintetizar; no identifica nodos ejecutables.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RationalError {
     ZeroDenominator,

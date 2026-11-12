@@ -18,6 +18,7 @@ pub struct Network221 {
     output_bias: Rational,
 }
 
+/// Fallo de forma previo a construir o causa de construcción preservada.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NetworkError {
     InputDimension { expected: usize, actual: usize },

@@ -81,6 +81,9 @@ impl Program {
     }
 }
 
+/// Error estructural: no se entrega un [`Program`] parcial.
+/// Los índices de referencia/ciclo pertenecen al origen, no a un snapshot.
+/// `Roots` conserva la causa de construcción; `NodeLimit` no identifica nodo.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompileError {
     Roots(BuildError),
