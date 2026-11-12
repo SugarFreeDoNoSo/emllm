@@ -23,6 +23,16 @@ pub(crate) struct PairTable {
 }
 
 impl PairTable {
+    /// Solo para fixtures internas de validación; no existe en la biblioteca
+    /// de producción y puede contener referencias inexistentes o ciclos.
+    #[cfg(test)]
+    pub(crate) fn from_test_pairs(pairs: Vec<[usize; 2]>) -> Self {
+        Self {
+            pairs,
+            has_one: true,
+        }
+    }
+
     pub(crate) fn node_count(&self) -> usize {
         self.pairs.len() + usize::from(self.has_one)
     }

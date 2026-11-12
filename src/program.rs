@@ -240,22 +240,15 @@ mod tests {
 
     #[test]
     fn rejects_malformed_graphs() {
-        assert!(matches!(
-            compile_nodes(|i| [Node::Magma(0, 0)].get(i).copied(), &[0], 10),
-            Err(CompileError::Cycle { index: 0 })
-        ));
-        assert!(matches!(
-            compile_nodes(|i| [Node::Magma(1, 2), Node::One].get(i).copied(), &[0], 10),
-            Err(CompileError::InvalidReference { index: 2 })
-        ));
-        assert!(matches!(
-            compile_nodes(
-                |i| [Node::Magma(1, 1), Node::Magma(0, 0)].get(i).copied(),
-                &[0],
-                10
-            ),
-            Err(CompileError::Cycle { .. })
-        ));
+        for (pairs, expected) in [
+            (vec![[2, 0]], CompileError::InvalidReference { index: 2 }),
+            (vec![[1, 0]], CompileError::Cycle { index: 1 }),
+            (vec![[2, 0], [1, 0]], CompileError::Cycle { index: 1 }),
+        ] {
+            let source = PairTable::from_test_pairs(pairs);
+            let result = compile_nodes(|index| source.node(index), &[1], 3);
+            assert_eq!(result.unwrap_err(), expected);
+        }
     }
 
     #[test]

@@ -78,3 +78,39 @@ fn one_program_requires_a_logical_node_but_no_pair_row() {
     assert!(program.nodes().eq([Node::One]));
     assert_eq!(program.node(1), None);
 }
+
+#[test]
+fn compilation_remaps_repeated_roots_and_excludes_unreachable_rows() {
+    let mut arena = Arena::new(4);
+    let one = arena.one().unwrap();
+    let t = arena.magma(&one, &one).unwrap();
+    arena.magma(&one, &t).unwrap(); // Fila que debe excluirse.
+    let v = arena.magma(&t, &t).unwrap();
+    assert_eq!(arena.pairs(), &[[0, 0], [0, 1], [1, 1]]);
+    assert_eq!(v.index(), 3);
+    let roots = [v.clone(), one.clone(), v];
+    let program = compile(&arena, &roots, 3).unwrap();
+    assert_eq!(program.pairs(), &[[0, 0], [1, 1]]);
+    assert_eq!(program.roots(), &[2, 0, 2]);
+    assert_eq!(program.node_count(), 3);
+    assert_eq!(program.node(2), Some(Node::Magma(1, 1)));
+    assert_eq!(program.stats().roots, 3);
+
+    assert!(matches!(
+        compile(&arena, &roots, 2),
+        Err(CompileError::NodeLimit { limit: 2 })
+    ));
+    assert!(matches!(
+        compile(&arena, &[], 4),
+        Err(CompileError::Roots(BuildError::EmptyRoots))
+    ));
+    let mut other = Arena::new(1);
+    let foreign = other.one().unwrap();
+    assert_eq!(foreign.index(), one.index());
+    assert!(matches!(
+        compile(&arena, &[foreign], 4),
+        Err(CompileError::Roots(BuildError::ForeignReference))
+    ));
+    assert_eq!(program.pairs(), &[[0, 0], [1, 1]]);
+    assert_eq!(program.roots(), &[2, 0, 2]);
+}
