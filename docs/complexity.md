@@ -385,3 +385,50 @@ El máximo local observado es **12**, en `src/program.rs:157-218`,
 estas unidades bajo la convención anterior, no complejidad universal del
 sistema, umbrales de calidad ni evidencia de rendimiento. Los detalles
 reproducibles quedan en `units.json`, `summary.json` y `cc/` de cada captura.
+
+## Medición no disponible o incompleta
+
+La captura termina con código 1 y un `coverage.json` explícito cuando falta una
+condición. La proyección se niega a producir `units.json`/`summary.json` si su
+estado no es `complete`. Nunca sustituir una ausencia por complejidad cero ni
+usar el resumen de otra captura como si correspondiese a la fallida.
+
+| Condición | Estado | Evidencia a inspeccionar |
+| --- | --- | --- |
+| Ejecutable ausente o no ejecutable | `unavailable` | Ruta de `RCA` y razón en `coverage.json` |
+| Alcance vacío o fuente esperada ausente/ilegible | `unavailable` | Inventario esperado, lista de ausencias o error de lectura |
+| JSON inválido, archivo omitido/duplicado o fallo del comando | `incomplete` | `metrics.stdout`, `metrics.stderr`, argv e inventarios |
+| Error de parsing, aun con exit code 0 y todos los JSON | `incomplete` | `syntax.stdout` con archivos y rangos afectados |
+
+Una advertencia en stderr se trata conservadoramente como análisis incompleto:
+revisar su causa antes de publicar cifras. Resolver la condición y crear un
+`RUN` nuevo; no editar un estado a mano para convertirlo en `complete`.
+
+### Controles ejecutados
+
+Se ejecutó la misma receta en una copia controlada de las fuentes bajo
+`target/analysis/procedure-checks/`, con un directorio nuevo por caso:
+
+- `missing-tool`: `RCA` apuntaba a un archivo inexistente; produjo
+  `unavailable`, sin cifras.
+- `missing-source`: se retiró de esa copia `src/expr.rs`, registrado en su
+  HEAD; produjo `unavailable` e identificó exactamente esa ausencia.
+- `omitted-file`: un wrapper de prueba añadió `-X '*expr.rs'` al CLI real;
+  produjo `incomplete` al comparar seis archivos esperados con cinco emitidos.
+  Este wrapper es una inyección controlada de omisión, no el analizador de los
+  reportes del núcleo.
+- `syntax-error`: una fuente adicional `src/invalid_control.rs` con
+  `fn broken( {` produjo JSON y error de parsing. Aunque la cobertura de archivos
+  fue 7/7 y el CLI terminó con cero, la receta produjo `incomplete`.
+
+Las cuatro ejecuciones devolvieron 1 y sus proyecciones rechazaron el resumen;
+conservan los logs originales y `projection.stderr`. Los controles de omisión
+y sintaxis no son mediciones del núcleo. Para repetirlos, usar una copia
+descartable, nunca retirar o invalidar las fuentes de trabajo del repositorio.
+
+Antes de introducir esos defectos, la copia aislada del crate, sin el binario en
+su directorio ni en `PATH`, ejecutó `cargo test --release`: **29 pruebas y 12
+doctests satisfactorios**. Los logs `without-analyzer.stdout` y
+`without-analyzer.stderr` están junto a los controles. La biblioteca estándar
+es la única dependencia del motor; la ausencia del CLI afecta solo a la
+receta externa y no impone una barrera de ejecución ni un umbral de CI.
