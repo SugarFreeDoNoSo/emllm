@@ -76,6 +76,10 @@ impl fmt::Display for BuildError {
 impl Error for BuildError {}
 
 /// Arena append-only: un nodo solo puede referirse a nodos ya existentes.
+/// Las posiciones nunca se reutilizan. No implementa `Clone`: copiar su identidad
+/// a un constructor independiente rompería la procedencia de sus referencias.
+/// Sus vistas son inmutables; la síntesis puede dejar nodos internos válidos al
+/// agotar presupuesto, pero no devuelve la raíz fallida como éxito.
 #[derive(Debug)]
 pub struct Arena {
     identity: Arc<()>,
@@ -114,6 +118,8 @@ impl Arena {
         self.intern(Node::Magma(left, right))
     }
 
+    /// Comprueba presencia y procedencia; no evalúa ni produce un programa.
+    /// Para obtener un snapshot ejecutable se usa [`crate::program::compile`].
     pub fn validate_roots(&self, roots: &[NodeId]) -> Result<(), BuildError> {
         if roots.is_empty() {
             return Err(BuildError::EmptyRoots);

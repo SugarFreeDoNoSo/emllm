@@ -10,7 +10,7 @@
 - [x] 2.2 Consolidar la compilación iterativa de nodos alcanzables con presupuesto explícito y orden topológico; verificar lista de raíces vacía, orden y duplicados, compartición, presupuesto insuficiente y fixtures internas con ciclos o referencias inexistentes.
 - [x] 2.3 Introducir o consolidar el programa validado como snapshot propietario e inmutable; verificar que sigue siendo inspeccionable y evaluable tras ampliar y liberar la arena original, y que un consumidor externo no puede fabricar ni modificar sus campos mediante la API segura.
 - [x] 2.4 Exponer inspección de solo lectura e identificadores de nodos del programa para diagnósticos; verificar que los operandos compartidos se reconocen como el mismo nodo y que todos los identificadores publicados resuelven dentro del snapshot correspondiente.
-- [ ] 2.5 Documentar construcción, compilación, procedencia, raíces y propiedad del snapshot en la API; ejecutar sus doctests positivos y `compile_fail`, revisar los diagnósticos de los ejemplos negativos y comprobar que ninguno depende de imports o preparación inválidos.
+- [x] 2.5 Documentar construcción, compilación, procedencia, raíces y propiedad del snapshot en la API; ejecutar sus doctests positivos y `compile_fail`, revisar los diagnósticos de los ejemplos negativos y comprobar que ninguno depende de imports o preparación inválidos.
 
 ## 3. Evaluacion aislada y composicion
 
@@ -56,3 +56,7 @@
 - Comprobaciones ejecutadas sobre el código de esa revisión: `cargo check`, `cargo test --release` (22 pruebas y 1 doctest), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` y `cargo run --release --example infer`, todas satisfactorias. Los commits finales de la base solo actualizaron README y seguimiento.
 - Entorno: Rust 1.92.0, `aarch64-apple-darwin`. Errores máximos escalares: racionales `5.551e-17` (límite `1e-9`) y operaciones/composiciones `2.220e-14` (límite `1e-8`).
 - Red: entradas `[0,0]`, `[1/2,-1/2]`, `[-1/2,1/2]`; nodos alcanzables 614, 676, 676; errores `2.426e-14`, `9.104e-15`, `4.829e-15`, todos bajo `1e-6`. Arena compartida: 1.684 nodos. Evidencia local, sin garantía global de precisión.
+
+## Revisión de diagnósticos (2.5)
+
+`cargo test --doc -- --show-output`: 7 ejemplos satisfactorios. Los intentos de fabricar `NodeId` y `Program` fallaron por campos privados (E0451); las asignaciones a vistas de nodos y raíces, por referencias compartidas (E0594). Los tres controles positivos compilaron y se ejecutaron. Ningún fallo dependió de imports o preparación incorrectos. Estos códigos se revisaron en Rust 1.92.0; `compile_fail` en estable no los comprueba automáticamente.
