@@ -59,8 +59,17 @@ pub struct Program {
 }
 
 impl Program {
+    /// Vista inmutable en orden de evaluación. Sus posiciones identifican nodos
+    /// únicamente dentro de este snapshot, incluidos los operandos de Magma.
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
+    }
+
+    /// Resuelve una posición de raíz, operando o diagnóstico en este programa.
+    /// No acepta un handle de construcción [`NodeId`]; sus índices pueden haber
+    /// sido remapeados. Un índice fuera del snapshot devuelve `None`.
+    pub fn node(&self, index: usize) -> Option<&Node> {
+        self.nodes.get(index)
     }
 
     /// Posiciones del snapshot, en el orden solicitado y conservando duplicados.

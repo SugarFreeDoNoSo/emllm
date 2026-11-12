@@ -61,3 +61,30 @@ fn compilation_preserves_root_positions_and_sharing_within_its_budget() {
         Err(CompileError::Roots(BuildError::EmptyRoots))
     ));
 }
+
+#[test]
+fn inspection_resolves_shared_operands_in_their_own_snapshot() {
+    let mut arena = Arena::new(4);
+    let one = arena.one().unwrap();
+    let t = arena.magma(&one, &one).unwrap();
+    arena.magma(&one, &t).unwrap(); // Excluido; fuerza remapeo del padre.
+    let root = arena.magma(&t, &t).unwrap();
+    let program = compile(&arena, std::slice::from_ref(&root), 3).unwrap();
+    let compiled_root = program.roots()[0];
+    assert_ne!(compiled_root, root.index());
+    let Node::Magma(left, right) = *program.node(compiled_root).unwrap() else {
+        panic!("expected a shared Magma root");
+    };
+    assert_eq!(left, right);
+    assert_eq!(program.node(left), Some(&Node::Magma(0, 0)));
+    for (index, node) in program.nodes().iter().enumerate() {
+        assert_eq!(program.node(index), Some(node));
+        if let Node::Magma(left, right) = node {
+            assert!(*left < index && *right < index);
+            assert!(program.node(*left).is_some());
+            assert!(program.node(*right).is_some());
+        }
+    }
+    assert!(program.roots().iter().all(|&root| program.node(root).is_some()));
+    assert_eq!(program.node(usize::MAX), None);
+}
