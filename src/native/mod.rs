@@ -8,6 +8,7 @@ mod compose;
 mod decode;
 mod instantiate;
 mod limits;
+pub mod model;
 mod prepared;
 mod template;
 pub mod tensor;

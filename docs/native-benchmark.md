@@ -21,9 +21,12 @@ combinación. Cada muestra debe validarse numéricamente fuera del cronómetro.
 Los pares agrupan canales reales y conservan ambas componentes y su orden;
 su número de elementos no implica ahorrar el 50 % de memoria o trabajo.
 
-Están verificadas la base de datos/referencias, los presupuestos, el supervisor
-y las expansiones compartidas (1.1–1.3, 2.1). Se completó y validó la base nativa
-de constantes (2.2); la plantilla y la inferencia completa siguen pendientes.
+**14/28 tareas verificadas (1.1–4.3); apply pausado en 4.4.** Están verificadas
+la base completa, plantillas parametrizadas, composición aislada, lectura densa,
+tensores y componentes. El primer bloque pasa las 42 etapas de `prefix8` con
+ambos lectores, pero `prefix16` falla con `LogDomain` en `layers.0.scores`
+(cabeza 6, posición 12, clave 3), reproducido por ambos evaluadores.
+La inferencia completa y el benchmark de cinco modos siguen pendientes.
 La evidencia de extracción y corpus
 está en [síntesis](synthesis.md#constructor-estructural-compartido-benchmark-nativo-21).
 [`benchmark-tiny-model-eml`](../openspec/changes/benchmark-tiny-model-eml/tasks.md)
@@ -594,3 +597,134 @@ cargo test --release --lib native::attention
 target/tiny-model/venv/bin/python -B tools/verify_native_components.py \
   --output-dir target/analysis/native-attention-components
 ```
+
+## Puerta del primer bloque (4.4)
+
+`PreparedBlock::prepare` recibe base, longitud 8/16, selección de diagnósticos y
+límites. Valida la configuración stories260K, construye puertos y ensambla ambas
+normalizaciones, Q/K/V, RoPE, atención causal, proyección de atención, residual,
+gate/up, SwiGLU, down y residual final del primer bloque. La preparación carece
+de acceso a IDs; estos se codifican y componen después.
+
+`Stage` identifica nombre de referencia, forma, rango de raíces y layout. Permite
+resolver una raíz a coordenadas y a posición/clave causal. La variante diagnóstica
+retiene embedding y todas las etapas/intermedios de `layers.0`; la variante
+residual prepara otra plantilla y solo retiene `[T,64]` al salir del bloque.
+Cada preparación tiene identidad y estadísticas propias, incluso si comparte
+base. Las dos variantes se construyen/leen secuencialmente para cada prefijo.
+
+```sh
+cargo test --release --lib native::model
+target/tiny-model/venv/bin/python -B -m unittest discover -s tools/tests -p test_native_block.py -v
+target/tiny-model/venv/bin/python -B tools/verify_native_block.py \
+  --output-dir target/analysis/native-block-initial
+```
+
+El verificador exige el inventario íntegro de trazas F64 del primer bloque y
+compara ambos lectores por coordenada con `1e-4 + 1e-4*abs(ref)`. Comprueba también
+equivalencia de residuales diagnósticos/no diagnósticos con
+`1e-12 + 1e-12*abs(ref)`. Conserva fase, última variante, tamaños, dumps y primer
+fallo localizado; un fallo deja 4.4 pendiente. Las pruebas negativas del lector
+externo rechazan etapas ausentes, valores no finitos y coordenadas alteradas.
+
+### Resultado inicial: 4.4 bloqueada
+
+Evidencia en `target/analysis/native-block-initial/`, con perfil
+`native-initial-v1` (`a9c9f3eabb16981e3871da73419edb5423adf00de4ff515339b1992b8bba2532`).
+Preparación y composición finalizan para ambas longitudes bajo los límites
+registrados. La aceptación completa falla al evaluar la variante diagnóstica
+de `prefix16`: `LogDomain`, nodo **6868948** del programa compilado, fase
+`evaluate-original`. La corrida termina con código 1 y conserva abierta esa fase.
+
+Para `prefix8` pasan **42 etapas / 20304 coordenadas** de diagnóstico y las
+**512 coordenadas** del residual, con ambos lectores. Máxima fracción del umbral
+de etapa **0.0000845788761610255** (`layers.0.score_exp`); en el residual,
+**0.000045530069725089275**. También pasa la equivalencia estricta del residual
+entre las dos variantes. Estas 512 coordenadas son la salida `[8,64]` del primer
+bloque; los logits de vocabulario todavía no están ensamblados.
+La inspección de los dumps confirma diferencia máxima **0** entre evaluadores
+y entre variantes para el residual de cada evaluador.
+
+| Caso / variante | Instrucciones | Raíces | Nodos nuevos | Cerrados base+delta | Alcanzables | Posiciones numéricas |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| prefix8 / diagnóstico | 15966217 | 20304 | 15966187 | 37465066 | 20992314 | 52167 |
+| prefix8 / residual | 15966217 | 512 | 15966187 | 37465066 | 20992314 | 93247 |
+| prefix16 / diagnóstico | 31227844 | 42656 | 30894299 | 52393178 | 35964732* | 67485* |
+
+\* Clausura y posiciones recuperadas por el replay diagnóstico descrito abajo.
+
+Las variantes de ocho tokens tienen igual cantidad de pares y diferente conjunto
+de raíces/plan. Se midieron por separado: igual cantidad de nodos no implica
+iguales costes. La base compartida contiene **21498879 nodos**, contados una sola
+vez en cada grafo cerrado.
+
+| Caso / variante | Preparar plantilla (s) | Componer (s) | Compilar (s) | Planificar (s) | Evaluar original / planificado (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| prefix8 / diagnóstico | 6.254559625 | 3.077338458 | 0.263270875 | 0.091496500 | 0.288203625 / 0.280682208 |
+| prefix8 / residual | 6.102476375 | 3.056147375 | 0.274975041 | 0.117865583 | 0.295990375 / 0.281496417 |
+| prefix16 / diagnóstico | 13.678827084 | 6.166810458 | no emitido | no emitido | fallo / no ejecutado |
+
+Son intentos únicos de validación; no son distribuciones del benchmark final.
+La preparación de base fue 15.577002542 s / 15.718693916 s para 8/16 tokens.
+En `prefix16`, compilar y planificar emitieron sus eventos de fin, pero sus tiempos
+internos no se devolvieron al fallar `decode`.
+
+RSS máximo global `wait4`: **5085364224 bytes** (prefix8) y **6652723200 bytes**
+(prefix16); máximos muestreados **5085347840 / 6631456768 bytes**, intervalo 0.1 s.
+Para prefix16, RSS muestreado durante base **3477028864**, plantilla **5945704448**,
+composición **6139330560**, compilación **5937217536**, planificación **6137331712**
+y lectura fallida **6631456768 bytes**. Incluyen los objetos residentes compartidos
+y costes del proceso; el máximo global no es memoria exclusiva de composición.
+No se agotó el presupuesto de RSS/nodos/tiempo de este intento.
+
+La tarea 4.4 permanece sin marcar y sus dependientes se detienen. La variante
+residual de dieciséis tokens no se ejecutó después del fallo diagnóstico.
+
+### Localización y confirmación del fallo
+
+Se añadió al verificador una investigación posterior al error: recompila la
+misma salida cerrada, propaga la dependencia del nodo fallido y localiza la
+primera raíz que lo alcanza. Ejecuta el lector planificado sobre ese programa
+para comprobar categoría y nodo. No entrega valores parciales como resultado
+válido ni cambia el grafo. Su reserva de dependencias es recuperable; si falla
+la investigación, se conserva el error original.
+
+```sh
+cargo test --release --example verify_native_block
+target/tiny-model/venv/bin/python -B tools/verify_native_block.py \
+  --output-dir target/analysis/native-block-diagnostic
+```
+
+La repetición conserva ambos prefijos, perfil y tolerancias. `prefix8` pasa otra
+vez con las mismas fracciones máximas. `prefix16` reproduce exactamente:
+
+- Etapa **`layers.0.scores`**, coordenada compacta **`[6,81]`**: cabeza Q **6**,
+  posición **12**, clave **3**; por GQA utiliza cabeza KV **3** (índices desde cero).
+- Primera raíz afectada **11697**, nodo raíz cerrado **27502285**. El nodo de
+  error **6868948** pertenece al programa compilado; son espacios de índices
+  distintos y no se intercambian.
+- Ambos evaluadores devuelven **`LogDomain` en el nodo 6868948**. Clausura
+  **35964732** nodos y plan **67485** posiciones. Replay: **0.721284209 s**.
+
+La referencia F64 para ese score es **-27.336533083412128**. La reducción
+balanceada previa al escalado es **-77.31939299290951**, multiplicada por la
+constante F32 de atención elevada a F64. Ese operando queda fuera del dominio
+propuesto del producto firmado (`|x|,|y|<=32`). En su expansión se toma
+`ln(1+x/64)`, cuyo argumento es negativo para ese valor de referencia. Esto
+identifica un problema de dominio en el escalado de scores que requiere revisar
+la expansión; el valor de referencia no se presenta como valor observado del
+nodo EML fallido. El éxito del corpus aislado no cubría este caso compuesto.
+
+`diagnostic.failure.json` y el reporte general conservan la localización y el
+error diferencial. La fase original queda abierta y el supervisor sigue
+vigilando mientras se investiga: su tiempo/RSS incluyen el replay adicional.
+RSS global `wait4` de esta segunda corrida: **5444452352 bytes** (prefix8) y
+**7425867776 bytes** (prefix16); en el segundo, máximo muestreado **7425802240**.
+Los costes iniciales de la tabla anterior proceden de la primera corrida,
+que terminó inmediatamente al fallar. Ambos intentos permanecen conservados.
+
+Verificación al pausar: **88 pruebas Rust y 22 doctests**, una prueba del ejemplo
+para localizar dependencias fallidas, **28 pruebas Python**, `cargo check
+--all-targets`, formato, Clippy y rustdoc con advertencias como errores, y
+`openspec validate benchmark-native-eml --strict` satisfactorios. La puerta
+numérica completa de 4.4 sigue fallando; estas comprobaciones no la sustituyen.
