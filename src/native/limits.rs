@@ -80,6 +80,7 @@ pub enum NativeErrorKind {
     },
     EmptyConstants,
     EmptyRoots,
+    MissingEmbedding,
     Shape {
         expected: usize,
         actual: usize,
@@ -155,6 +156,7 @@ impl fmt::Display for NativeError {
             }
             NativeErrorKind::EmptyConstants => write!(f, "at least one constant is required"),
             NativeErrorKind::EmptyRoots => write!(f, "at least one root is required"),
+            NativeErrorKind::MissingEmbedding => write!(f, "prepared base has no embedding matrix"),
             NativeErrorKind::Shape { expected, actual } => {
                 write!(f, "expected length {expected}, got {actual}")
             }

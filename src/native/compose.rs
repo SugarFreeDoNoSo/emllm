@@ -219,6 +219,13 @@ impl CompositionBuilder {
         }
     }
 
+    pub(crate) fn reference_at(&self, index: usize) -> Result<NativeRef, NativeError> {
+        if index >= self.node_count() {
+            return Err(error(NativeErrorKind::InvalidReference { index }));
+        }
+        Ok(self.handle(index))
+    }
+
     pub fn finish(self, roots: &[NativeRef]) -> Result<NativeOutput, NativeError> {
         if roots.is_empty() {
             return Err(error(NativeErrorKind::EmptyRoots));

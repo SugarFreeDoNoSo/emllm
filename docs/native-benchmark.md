@@ -359,3 +359,27 @@ Dos pruebas comprueban cierre/hijos anteriores, One único, aislamiento, presupu
 base+delta, fallo sin modificar base, liberación de constructores y consumo de una
 salida sin decodificar, incluso con una expresión de dominio numérico inválido.
 `cargo test --release --lib native::compose` y Clippy pasan.
+
+## Instanciación de entradas (3.2)
+
+`PreparedModel::from_template` comprueba matriz de embeddings, longitud y
+`T*canales` puertos sin recibir tokens. Esta frontera estructural permite fixtures;
+las fórmulas de un Transformer completo corresponden al ensamblador de la sección 4
+del checklist, todavía pendiente.
+
+`PreparedModel::compose` vuelve a validar el prefijo, crea un `CompositionBuilder`
+nuevo y selecciona cada fila de embeddings dentro de la llamada. Asocia puertos,
+resuelve cada par de plantilla en orden y materializa las raíces. El remapeo es
+un `Vec<usize>` por instrucción, no un Arc por arista. Prefijo, base y plantilla
+son inmutables; remapeos, asociaciones e internado se liberan antes del retorno.
+
+Dos pruebas verifican A/B/fallo/A sobre la misma preparación pequeña: las entradas
+distintas producen 3 y 2 frente a oráculos independientes; repetir A reproduce
+estructura y valores con otra identidad de solicitud y trabajo nuevo. El fallo
+por presupuesto no altera base/plantilla ni resultados anteriores. La salida
+sigue siendo legible al liberar la preparación. También se rechazan prefijos
+ajenos y formas de puertos incompatibles.
+
+`cargo test --release --lib native::instantiate` y Clippy pasan. La comprobación
+numérica de esas fixtures usa una llamada externa al compilador/evaluador después
+de componer; la API de composición no llama a ninguno.

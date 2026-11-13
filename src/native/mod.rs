@@ -3,12 +3,14 @@
 
 mod codec;
 mod compose;
+mod instantiate;
 mod limits;
 mod prepared;
 mod template;
 
 pub use codec::{NativePrefix, NativeSymbol};
 pub use compose::{CompositionBuilder, NativeOutput, NativeRef, OutputStorage};
+pub use instantiate::PreparedModel;
 pub use limits::{NativeError, NativeErrorKind, NativeLimits, Phase, Resource};
 pub use prepared::{
     BaseRef, BaseStorage, BaseTensor, PreparationError, PreparedBase, SYNTHESIS_VERSION,
