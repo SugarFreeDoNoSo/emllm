@@ -67,6 +67,13 @@ impl PairTable {
         self.pairs.push(pair);
         index
     }
+
+    pub(crate) fn try_reserve(
+        &mut self,
+        additional: usize,
+    ) -> Result<(), std::collections::TryReserveError> {
+        self.pairs.try_reserve(additional)
+    }
 }
 
 /// Referencia opaca que conserva la identidad de su arena de origen.

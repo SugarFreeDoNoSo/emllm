@@ -103,6 +103,11 @@ pub enum NativeErrorKind {
         operand: usize,
     },
     Compile(crate::program::CompileError),
+    Plan(crate::execution::PlanError),
+    Evaluation(crate::eval::EvalError),
+    Differential {
+        root: usize,
+    },
     Limit {
         resource: Resource,
         requested: usize,
@@ -180,6 +185,11 @@ impl fmt::Display for NativeError {
                 "instruction {instruction} has nonprevious operand {operand}"
             ),
             NativeErrorKind::Compile(error) => write!(f, "{error}"),
+            NativeErrorKind::Plan(error) => write!(f, "{error}"),
+            NativeErrorKind::Evaluation(error) => write!(f, "{error}"),
+            NativeErrorKind::Differential { root } => {
+                write!(f, "numeric readers differ at root {root}")
+            }
             NativeErrorKind::Limit {
                 resource,
                 requested,

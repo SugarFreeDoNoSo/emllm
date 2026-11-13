@@ -6,6 +6,10 @@ use std::fmt;
 
 use crate::expr::{Arena, BuildError, NodeId, PairTable};
 
+mod dense;
+pub use dense::DenseCompileStorage;
+pub(crate) use dense::{DenseCompileError, compile_dense};
+
 /// Forma cerrada de los nodos que expone la inspección del programa.
 pub use crate::expr::Node;
 

@@ -383,3 +383,44 @@ ajenos y formas de puertos incompatibles.
 `cargo test --release --lib native::instantiate` y Clippy pasan. La comprobación
 numérica de esas fixtures usa una llamada externa al compilador/evaluador después
 de componer; la API de composición no llama a ninguno.
+
+## Compilación densa y lectura externa (3.3)
+
+`compile_output` acepta exclusivamente una `NativeOutput` cerrada y produce un
+`Program` validado. El compilador denso es interno: recorre iterativamente primero
+el hijo izquierdo y después el derecho, conserva raíces repetidas y descarta
+nodos no alcanzables. Los estados (`u8`) y el remapeo (`usize`) se dimensionan por
+la fuente completa base+delta; profundidad y pares compilados, por la clausura.
+Pila, tablas y raíces usan reservas recuperables con tamaños comprobados.
+
+`DenseCompileStorage` registra capacidades de estados, remapeo, profundidad y
+pila antes de liberarlos. El programa resultante informa sus propios pares y
+raíces. `closed_nodes` limita toda la fuente, `roots` sus posiciones de salida y
+`reachable_nodes` los nodos visitados, incluido One. Son presupuestos distintos:
+una clausura pequeña todavía necesita el remapeo denso de su fuente residente.
+
+`decode` mide por separado compilación, planificación, evaluación original,
+evaluación planificada y comparación diferencial. Aplica a todas las raíces
+`1e-12 + 1e-12*abs(original)` y rechaza valores no finitos. Devuelve ambos
+vectores y estadísticas de almacenamiento; programa, plan y temporales se
+liberan al retornar. El llamador mide además el total si necesita incluir esa
+liberación. La selección de token y la comparación con oráculos son posteriores.
+
+Los errores conservan fase: `Compile`, `Plan`, `EvaluateOriginal`,
+`EvaluatePlanned` o `Compare`; el error numérico conserva categoría y nodo del
+programa compilado. Referencias/ciclos, presupuesto, overflow y reserva se
+diagnostican sin entregar una salida parcial. Las APIs originales se conservan.
+
+Tres pruebas verifican equivalencia con el compilador anterior en ramas de orden
+distinto, raíces repetidas, nodos inalcanzables, profundidad 20000 y fallos;
+comprueban límites cero/exacto/excedido y ambos evaluadores. Una expresión con
+logaritmo de cero se construye y compila correctamente, y falla únicamente al
+leerla, con igual nodo/categoría en los dos motores. Si no es alcanzable, se omite.
+Verificación final de 3.3: **80 pruebas Rust y 22 doctests**, formato, Clippy y
+`git diff --check` satisfactorios.
+
+```sh
+cargo test --release
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+```
