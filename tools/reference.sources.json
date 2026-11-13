@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/karpathy/llama2.c",
+  "revision": "350e04fe35433e6d2941dce5a1f53308f87058eb",
+  "name": "model.py",
+  "size": 15289,
+  "sha256": "54f35dbd347100c0066da93dfdf9f19c2ec1e8758bfffcedbdfdb09d5c343e1f"
+}

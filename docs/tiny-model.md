@@ -110,3 +110,47 @@ tiene 52 entradas y 1.043.208 bytes, SHA-256
 Dos exportaciones produjeron binario y manifiesto idénticos. Pasaron seis pruebas
 locales de integridad/formato, incluidas corrupción, alias, valores no finitos y
 límites. Evidencia: `target/analysis/tiny-canonical-export/`.
+
+## Referencias y corpus (2.4)
+
+`tools/reference.py` ejecuta el `model.py` original, fijado por revisión y SHA-256
+en `tools/reference.sources.json`, y fórmulas explícitas independientes en F32 y
+F64. El original usa su rama manual de atención, modo evaluación y CPU/un hilo;
+los hooks observan salidas sin modificarlas. El archivo fuente permanece intacto.
+La ruta F64 eleva pesos y constantes F32 exactamente una vez y audita dtype,
+dispositivo y finitud en cada etapa; no aplica `.double()` al modelo original.
+
+```sh
+target/tiny-model/venv/bin/python -B tools/reference.py
+target/tiny-model/venv/bin/python -B tools/reference.py --offline
+```
+
+Se generan `target/tiny-model/reference/report.json`, entorno separado y tres
+trazas por prefijo: `original_f32`, `explicit_f32` y `explicit_f64`. Cada traza
+tiene `values.bin` y `trace.json` con dtype, forma row-major, offset, tamaño y
+SHA-256 por tensor. Scores/probabilidades guardan solo posiciones causales:
+`[head, packed]`, con `packed=t*(t+1)/2+j`, `0<=j<=t`; no contienen máscaras
+infinitas. Las fórmulas explícitas usan el primer score permitido como pivote.
+
+Se verificaron 93 etapas del original contra F32 explícito y 213 etapas
+explícitas por dtype y prefijo. No hubo divergencias con `1e-4 + 1e-4*abs(ref)`.
+Ambas fixtures producen 512 logits finitos en los tres recorridos.
+
+El corpus se fija antes de evaluar EML en `reference/corpus/`:
+
+- `scalars.u32`: 280688 bits F32 distintos, ordenados como u32 little-endian.
+- `scalars.json`: primera procedencia tensor/índice de cada valor y hash binario.
+- `corpus.json`: 6599 operaciones escalares, 631 productos/reducciones completos
+  de longitudes 8/64/172 y 208 componentes RMSNorm/softmax, con operandos por bits,
+  procedencia y oráculos Python F64. SiLU aparece también como operación escalar.
+
+La selección incluye los primeros cuatro, mínimo/máximo y menor magnitud no nula
+de cada etapa; desempata por primer índice. Añade casos de mínima cancelación
+relativa en residuales/proyecciones, todos los pesos/constantes distintos y todos
+los operandos de las reducciones/componentes seleccionados. Las sumas del oráculo
+de reducciones agrupan pares adyacentes en árbol, pasando la cola impar al nivel
+siguiente. Su agrupación se distingue de los kernels matriciales de PyTorch.
+
+SHA-256 del corpus: `d4c9207a3ea4e9b526bdc4c6b2a791cd6439586c853a8b58e6c3f9c2095677c5`;
+de `scalars.u32`: `f63e3268b16a6127ac23e86ff95523894de184bffb4f4ad750fed8326f237b42`.
+Estos son oráculos externos, todavía no resultados de aritmética EML.
