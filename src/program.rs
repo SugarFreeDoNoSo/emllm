@@ -91,7 +91,29 @@ pub struct ProgramStats {
     pub depth: usize,
 }
 
+/// Almacenamiento residente del snapshot. Capacidad incluye payload y espacio
+/// sobrante; metadata incluye cabeceras y padding. No mide asignador ni RSS.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProgramStorage {
+    pub pair_payload_bytes: usize,
+    pub pair_capacity_bytes: usize,
+    pub root_payload_bytes: usize,
+    pub root_capacity_bytes: usize,
+    pub metadata_bytes: usize,
+}
+
 impl Program {
+    /// Consulta O(1) de tamaños reales, sin modificar ni recorrer el snapshot.
+    pub fn storage(&self) -> ProgramStorage {
+        ProgramStorage {
+            pair_payload_bytes: std::mem::size_of_val(self.pairs()),
+            pair_capacity_bytes: self.table.pair_capacity() * std::mem::size_of::<[usize; 2]>(),
+            root_payload_bytes: std::mem::size_of_val(self.roots()),
+            root_capacity_bytes: self.roots.capacity() * std::mem::size_of::<usize>(),
+            metadata_bytes: std::mem::size_of::<Self>(),
+        }
+    }
+
     /// Consulta constante de estadísticas, sin evaluación ni recorrido adicional.
     pub fn stats(&self) -> &ProgramStats {
         &self.stats

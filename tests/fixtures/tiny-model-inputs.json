@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "text": "Once upon a time, there was a little girl named Lily. She loved to play outside in the park.",
+  "tokenizer_sha256": "dfff07d929db979913f166ec94a6f5ecad4c70cfed8eb5c9cbe7e464455e46f5",
+  "add_bos": true,
+  "add_eos": false,
+  "bos_id": 1,
+  "eos_id": 2,
+  "vocab_size": 512,
+  "fixtures": [
+    {
+      "name": "prefix8",
+      "token_ids": [1, 403, 407, 261, 378, 432, 383, 286],
+      "positions": [0, 1, 2, 3, 4, 5, 6, 7]
+    },
+    {
+      "name": "prefix16",
+      "token_ids": [1, 403, 407, 261, 378, 432, 383, 286, 261, 376, 298, 315, 421, 395, 317, 426],
+      "positions": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    }
+  ]
+}

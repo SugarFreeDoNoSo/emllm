@@ -56,6 +56,32 @@ impl fmt::Display for EvalError {
 
 impl Error for EvalError {}
 
+/// Tamaños de los dos vectores de una ejecución satisfactoria, capturados antes
+/// de liberar los temporales. Capacidad incluye elementos ocupados y sobrantes.
+/// Excluye asignador, otros locales, registros de diagnóstico y RSS del proceso.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EvaluationStorage {
+    pub values: usize,
+    pub value_payload_bytes: usize,
+    pub value_capacity_bytes: usize,
+    pub output_payload_bytes: usize,
+    pub output_capacity_bytes: usize,
+    pub buffer_metadata_bytes: usize,
+}
+
+impl EvaluationStorage {
+    pub(crate) fn capture(values: &Vec<f64>, outputs: &Vec<f64>) -> Self {
+        Self {
+            values: values.len(),
+            value_payload_bytes: std::mem::size_of_val(values.as_slice()),
+            value_capacity_bytes: values.capacity() * std::mem::size_of::<f64>(),
+            output_payload_bytes: std::mem::size_of_val(outputs.as_slice()),
+            output_capacity_bytes: outputs.capacity() * std::mem::size_of::<f64>(),
+            buffer_metadata_bytes: 2 * std::mem::size_of::<Vec<f64>>(),
+        }
+    }
+}
+
 /// Evalúa cada nodo compartido una sola vez, en el orden ya compilado.
 /// Solo acepta un [`Program`] validado y su presupuesto explícito; no recibe
 /// raíces adicionales. La respuesta contiene todas las salidas o un error.
@@ -104,6 +130,15 @@ impl Error for EvalError {}
 /// evaluate(&nodes, 1);
 /// ```
 pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalError> {
+    evaluate_with_storage(program, max_nodes).map(|(outputs, _)| outputs)
+}
+
+/// Mismo recorrido y errores que [`evaluate`], con contabilidad de los buffers
+/// realmente asignados. No reutiliza resultados ni retiene el buffer de valores.
+pub fn evaluate_with_storage(
+    program: &Program,
+    max_nodes: usize,
+) -> Result<(Vec<f64>, EvaluationStorage), EvalError> {
     if program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },
@@ -116,10 +151,12 @@ pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalErr
         let value = magma_value(values[left], values[right], row + 1)?;
         values.push(value);
     }
-    Ok(program.roots().iter().map(|&root| values[root]).collect())
+    let outputs = program.roots().iter().map(|&root| values[root]).collect();
+    let storage = EvaluationStorage::capture(&values, &outputs);
+    Ok((outputs, storage))
 }
 
-fn magma_value(left: f64, right: f64, index: usize) -> Result<f64, EvalError> {
+pub(crate) fn magma_value(left: f64, right: f64, index: usize) -> Result<f64, EvalError> {
     let error = |kind| EvalError {
         kind,
         node: Some(index),

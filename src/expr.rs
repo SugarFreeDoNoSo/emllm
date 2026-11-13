@@ -41,6 +41,10 @@ impl PairTable {
         &self.pairs
     }
 
+    pub(crate) fn pair_capacity(&self) -> usize {
+        self.pairs.capacity()
+    }
+
     pub(crate) fn node(&self, index: usize) -> Option<Node> {
         if index == 0 {
             return self.has_one.then_some(Node::One);
