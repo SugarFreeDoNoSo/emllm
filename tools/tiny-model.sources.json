@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "model": "stories260K",
+  "repository": "karpathy/tinyllamas",
+  "revision": "0bd21da7698eaf29a0d7de3992de8a46ef624add",
+  "reference_repository": "https://github.com/karpathy/llama2.c",
+  "reference_revision": "350e04fe35433e6d2941dce5a1f53308f87058eb",
+  "files": [
+    {
+      "name": "stories260K.pt",
+      "size": 1061090,
+      "sha256": "eec953f9d0f139e894ef8996302680e64b24813c7a98425424f5c85f7cf4abb1"
+    },
+    {
+      "name": "stories260K.bin",
+      "size": 1056540,
+      "sha256": "b0a507e7ad0f626624f17112325e66691f9076d622e1d3274d103d00299f2696"
+    },
+    {
+      "name": "tok512.model",
+      "size": 7645,
+      "sha256": "dfff07d929db979913f166ec94a6f5ecad4c70cfed8eb5c9cbe7e464455e46f5"
+    },
+    {
+      "name": "tok512.bin",
+      "size": 6227,
+      "sha256": "037cb335abb25d1fa9e8ecae30ed2a3a8ace9302862ebcdc05d51a6bbb10c312"
+    }
+  ]
+}
