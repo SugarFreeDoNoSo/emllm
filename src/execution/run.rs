@@ -34,6 +34,8 @@ pub fn run_with_storage(
     plan: &ExecutionPlan<'_>,
     max_nodes: usize,
 ) -> Result<(Vec<f64>, EvaluationStorage), EvalError> {
+    #[cfg(test)]
+    crate::eval::probe::enter(crate::eval::probe::Entry::Planned);
     if plan.program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },

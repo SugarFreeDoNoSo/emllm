@@ -26,6 +26,9 @@ use std::fmt;
 
 use crate::program::Program;
 
+#[cfg(test)]
+pub(crate) mod probe;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EvalErrorKind {
     /// El segundo operando es cero o negativo.
@@ -139,6 +142,8 @@ pub fn evaluate_with_storage(
     program: &Program,
     max_nodes: usize,
 ) -> Result<(Vec<f64>, EvaluationStorage), EvalError> {
+    #[cfg(test)]
+    probe::enter(probe::Entry::Original);
     if program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },
@@ -157,6 +162,8 @@ pub fn evaluate_with_storage(
 }
 
 pub(crate) fn magma_value(left: f64, right: f64, index: usize) -> Result<f64, EvalError> {
+    #[cfg(test)]
+    probe::enter(probe::Entry::Kernel);
     let error = |kind| EvalError {
         kind,
         node: Some(index),

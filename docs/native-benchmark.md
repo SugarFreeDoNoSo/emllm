@@ -314,6 +314,75 @@ cargo test --release --doc
 cargo clippy --all-targets -- -D warnings
 ```
 
+## Aislamiento numérico y ejemplo reproducible (3.4)
+
+La instrumentación `eval::probe` existe solo bajo `cfg(test)`. Intercepta las
+entradas de ambos evaluadores y el kernel `magma_value`, incluso una evaluación
+de One sin pares. Su estado es local al hilo y se restaura al salir o hacer
+unwind. La prueba de aislamiento prepara base/plantilla, codifica y compone con
+todas esas entradas prohibidas: **cero llamadas**. También compila y planifica
+bajo esa prohibición. Los controles negativos confirman el rechazo de las tres
+entradas; al autorizar la lectura explícita se observa una llamada por evaluador
+y exactamente dos ejecuciones por par alcanzable. El binario medido conserva el
+kernel real sin instrumentación.
+
+`PreparedModel::compose_with_stats` comparte la implementación de `compose` y
+devuelve conteos de coordenadas de embedding e instrucciones, payload/capacidad
+de asociaciones, remapeo y handles temporales de raíces. Su liberación permanece
+dentro de la llamada. Base, plantilla, prefijo y salida tienen su contabilidad
+propia; el índice de composición publicado por `OutputStorage` es histórico.
+La compilación informa además payloads y máximo de entradas de pila, diferenciados
+de sus capacidades. No se suman máximos de temporales que viven en fases distintas
+para presentarlos como un pico simultáneo.
+
+El ejemplo `native_boundary` prepara cero en One/Magma y compone 65536 aplicaciones
+de `M(0,x)=1-ln(x)` desde One. El oráculo externo es 1; devuelve una expresión y
+la lee con ambos motores después de detener el cronómetro de composición. Usa
+la API estructural pequeña; las pruebas de prefijos cubren por separado símbolos
+y embeddings. Se ejecuta sin checkpoint:
+
+```sh
+cargo test --release --lib native::instantiate::tests::structural_phases_succeed_with_every_numeric_entry_forbidden
+cargo build --release --example native_boundary
+target/tiny-model/venv/bin/python -B tools/native_resources.py --interval 0.001 \
+  --output-dir target/analysis/native-boundary-initial -- \
+  target/release/examples/native_boundary 65536
+```
+
+La corrida registrada pasa con valor 1 en ambos motores: base 4 nodos, delta
+65536, clausura 65540 y tres posiciones numéricas. Composición **0.005401 s**;
+compilación **0.000883333 s**; planificación **0.00025975 s**; evaluaciones
+**0.000781208/0.000760167 s**. Es una comprobación pequeña, no una distribución
+de rendimiento del Transformer.
+
+Contraste de almacenamiento y proceso en esa misma corrida:
+
+| Almacenamiento | Payload / capacidad en bytes |
+| --- | ---: |
+| Vectores de base | 60 / 88 |
+| Mapas de base, payload modelado | 120 |
+| Pares del delta | 1048576 / 1048576 |
+| Internado de composición liberado, payload modelado | 2752512 |
+| Estados de compilación | 65540 / 65540 |
+| Remapeo de compilación | 524320 / 524320 |
+| Profundidades | 524320 / 1048576 |
+| Pila, payload máximo / capacidad | 1048608 / 2097152 |
+| Pares compilados, capacidad | 2097152 |
+| Instrucciones del plan, capacidad | 1572936 |
+| Valores original / planificado, capacidades | 524320 / 24 |
+| RSS máximo global `wait4` | **13795328** |
+
+El RSS incluye asignador, control de mapas, pila, runtime y páginas retenidas;
+los payloads no describen esos costes. La base se cuenta una sola vez aunque
+esté retenida por la salida. El sondeo `ps` solo observó arranque/salida y un
+máximo de 32768 bytes: **no capturó el trabajo breve**. No hay RSS por fase
+acreditado en este ejemplo; el máximo global procede de `wait4`, sin atribuirlo
+a composición. Los eventos recibidos tampoco sustituyen los tiempos del hijo.
+La evidencia íntegra queda en `target/analysis/native-boundary-initial/`.
+
+Verificación de 3.4: 28 pruebas de biblioteca, ejemplo supervisado, Clippy,
+formato y diff satisfactorios.
+
 ## Prefijos codificados (2.4)
 
 `NativePrefix::encode` valida longitud y posiciones consecutivas desde cero y

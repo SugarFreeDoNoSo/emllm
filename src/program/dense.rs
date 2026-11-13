@@ -19,9 +19,14 @@ impl From<CompileError> for DenseCompileError {
 pub struct DenseCompileStorage {
     pub source_nodes: usize,
     pub reachable_nodes: usize,
+    pub state_payload_bytes: usize,
     pub state_capacity_bytes: usize,
+    pub remap_payload_bytes: usize,
     pub remap_capacity_bytes: usize,
+    pub depth_payload_bytes: usize,
     pub depth_capacity_bytes: usize,
+    pub stack_peak_entries: usize,
+    pub stack_peak_payload_bytes: usize,
     pub stack_capacity_bytes: usize,
 }
 
@@ -61,11 +66,13 @@ pub(crate) fn compile_dense(
     remap.resize(source_nodes, usize::MAX);
     let mut depths: Vec<usize> = Vec::new();
     let mut stack = Vec::new();
+    let mut stack_peak_entries = 0;
     let mut table = PairTable::default();
     let mut visited = 0;
     for &root in roots {
         reserve(&mut stack, 1, "dense stack")?;
         stack.push((root, false));
+        stack_peak_entries = stack_peak_entries.max(stack.len());
         while let Some((index, exiting)) = stack.pop() {
             if index >= source_nodes {
                 return Err(CompileError::InvalidReference { index }.into());
@@ -115,6 +122,7 @@ pub(crate) fn compile_dense(
                 stack.push((right, false));
                 stack.push((left, false));
             }
+            stack_peak_entries = stack_peak_entries.max(stack.len());
         }
     }
     let mut compiled_roots = Vec::new();
@@ -123,9 +131,14 @@ pub(crate) fn compile_dense(
     let storage = DenseCompileStorage {
         source_nodes,
         reachable_nodes: table.node_count(),
+        state_payload_bytes: size_of_val(states.as_slice()),
         state_capacity_bytes: states.capacity(),
+        remap_payload_bytes: size_of_val(remap.as_slice()),
         remap_capacity_bytes: remap.capacity() * size_of::<usize>(),
+        depth_payload_bytes: size_of_val(depths.as_slice()),
         depth_capacity_bytes: depths.capacity() * size_of::<usize>(),
+        stack_peak_entries,
+        stack_peak_payload_bytes: stack_peak_entries * size_of::<(usize, bool)>(),
         stack_capacity_bytes: stack.capacity() * size_of::<(usize, bool)>(),
     };
     let edges = table

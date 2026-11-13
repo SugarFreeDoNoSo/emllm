@@ -1,6 +1,6 @@
 use super::{
     CompositionBuilder, NativeError, NativeErrorKind, NativeLimits, NativeOutput, NativePrefix,
-    Phase, PreparedBase, Resource, Template,
+    NativeRef, Phase, PreparedBase, Resource, Template,
 };
 use crate::model_io::TensorKind;
 use std::sync::Arc;
@@ -14,6 +14,20 @@ pub struct PreparedModel {
     length: usize,
     embedding: usize,
     channels: usize,
+}
+
+/// Temporales de una instanciación satisfactoria, liberados antes del retorno.
+/// El delta y el índice histórico se informan en `NativeOutput::storage`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CompositionStats {
+    pub embedding_coordinates: usize,
+    pub template_instructions: usize,
+    pub port_payload_bytes: usize,
+    pub port_capacity_bytes: usize,
+    pub remap_payload_bytes: usize,
+    pub remap_capacity_bytes: usize,
+    pub root_handle_payload_bytes: usize,
+    pub root_handle_capacity_bytes: usize,
 }
 
 impl PreparedModel {
@@ -72,6 +86,17 @@ impl PreparedModel {
         prefix: &NativePrefix,
         limits: NativeLimits,
     ) -> Result<NativeOutput, NativeError> {
+        self.compose_with_stats(prefix, limits)
+            .map(|(output, _)| output)
+    }
+
+    /// Misma frontera que `compose`, incluyendo captura de tamaños y liberación
+    /// de todos los temporales. No realiza recorridos/evaluación para medirlos.
+    pub fn compose_with_stats(
+        &self,
+        prefix: &NativePrefix,
+        limits: NativeLimits,
+    ) -> Result<(NativeOutput, CompositionStats), NativeError> {
         prefix
             .validate_for(self.base(), self.length)
             .map_err(|mut e| {
@@ -147,7 +172,17 @@ impl PreparedModel {
         for &index in self.template.root_indices() {
             roots.push(request.reference_at(resolve(index, &remap)?)?);
         }
-        request.finish(&roots)
+        let stats = CompositionStats {
+            embedding_coordinates: ports.len(),
+            template_instructions: remap.len(),
+            port_payload_bytes: size_of_val(ports.as_slice()),
+            port_capacity_bytes: ports.capacity() * size_of::<usize>(),
+            remap_payload_bytes: size_of_val(remap.as_slice()),
+            remap_capacity_bytes: remap.capacity() * size_of::<usize>(),
+            root_handle_payload_bytes: size_of_val(roots.as_slice()),
+            root_handle_capacity_bytes: roots.capacity() * size_of::<NativeRef>(),
+        };
+        Ok((request.finish(&roots)?, stats))
     }
 }
 
@@ -174,6 +209,61 @@ mod tests {
     fn read(output: &NativeOutput) -> Vec<f64> {
         let program = compile_nodes(|i| output.node(i), output.root_indices(), 10000).unwrap();
         evaluate(&program, 10000).unwrap()
+    }
+
+    #[test]
+    fn structural_phases_succeed_with_every_numeric_entry_forbidden() {
+        use crate::{
+            eval::{
+                magma_value,
+                probe::{self, Calls},
+            },
+            execution::{PlanLimits, plan, run},
+            native::{compile_output, decode},
+        };
+        use std::panic::catch_unwind;
+        let limits = NativeLimits::default();
+        let ((output, stats), calls) = probe::observe(true, || {
+            let model = model(); // Incluye síntesis de base y preparación de plantilla.
+            let prefix =
+                NativePrefix::encode(model.base().clone(), &[1, 2], &[0, 1], 2, limits).unwrap();
+            model.compose_with_stats(&prefix, limits).unwrap()
+        });
+        assert_eq!(calls, Calls::default());
+        assert_eq!(stats.embedding_coordinates, 4);
+        assert!(stats.template_instructions > 0);
+        assert_eq!(
+            stats.remap_payload_bytes,
+            stats.template_instructions * size_of::<usize>()
+        );
+        assert!(stats.remap_capacity_bytes >= stats.remap_payload_bytes);
+        let ((program, _), calls) =
+            probe::observe(true, || compile_output(&output, limits).unwrap());
+        assert_eq!(calls, Calls::default());
+        let (plan, calls) = probe::observe(true, || {
+            plan(
+                &program,
+                PlanLimits {
+                    max_nodes: limits.reachable_nodes,
+                    max_slots: limits.numeric_slots,
+                },
+            )
+            .unwrap()
+        });
+        assert_eq!(calls, Calls::default());
+        assert!(
+            catch_unwind(|| probe::observe(true, || evaluate(&program, limits.reachable_nodes)))
+                .is_err()
+        );
+        assert!(
+            catch_unwind(|| probe::observe(true, || run(&plan, limits.reachable_nodes))).is_err()
+        );
+        assert!(catch_unwind(|| probe::observe(true, || magma_value(0.0, 1.0, 1))).is_err());
+        let (decoded, calls) = probe::observe(false, || decode(&output, limits).unwrap());
+        assert_eq!((calls.original, calls.planned), (1, 1));
+        assert_eq!(calls.kernel, 2 * (program.node_count() - 1));
+        assert!((decoded.original[0] - 3.0).abs() < 1e-8);
+        assert_eq!(decoded.original, decoded.planned);
     }
 
     #[test]
