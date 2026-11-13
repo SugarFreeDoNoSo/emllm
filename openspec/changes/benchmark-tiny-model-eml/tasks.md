@@ -16,7 +16,7 @@
 
 - [x] 3.1 Añadir `execution/plan.rs` y su API privada/validada de instrucciones, plan prestado del programa, límites y estadísticas; implementar último uso, raíces vivas, One reservado y asignación determinista sin evaluar nodos. Verificar One, límites cero/exactos, mapa de raíces, plan de un programa numéricamente inválido y doctests que impidan fabricar o mutar planes.
 - [x] 3.2 Añadir `execution/run.rs` y compartir internamente el kernel de `eval.rs`, preservando la API del evaluador original. Verificar lecturas de ambos operandos antes de escribir, raíces repetidas, comparación diferencial, presupuesto lógico antes de ejecutar y categorías/nodos de errores de dominio y desbordamiento; documentar firmas, ownership y semántica.
-- [ ] 3.3 Completar pruebas de liveness con operandos iguales, raíz intermedia, diamante, último uso simultáneo, fallos tras reutilización, reintentos y ejecuciones intercaladas. Verificar preservación de nodos/pares/raíces/estadísticas y la cadena estable de 10000 pasos con como máximo dos posiciones y error diferencial dentro de `1e-12 + 1e-12*abs(ref)`.
+- [x] 3.3 Completar pruebas de liveness con operandos iguales, raíz intermedia, diamante, último uso simultáneo, fallos tras reutilización, reintentos y ejecuciones intercaladas. Verificar preservación de nodos/pares/raíces/estadísticas y la cadena estable de 10000 pasos con como máximo dos posiciones y error diferencial dentro de `1e-12 + 1e-12*abs(ref)`.
 - [ ] 3.4 Publicar estadísticas y una comparación reproducible del plan frente al evaluador original sobre la cadena y las tres redes existentes; verificar tamaños reales de instrucciones, programa, raíces, valores y capacidades sin atribuir payload a RSS. Actualizar `docs/architecture.md` y `docs/complexity.md` con API, límites y evidencia del ahorro de posiciones, incluyendo cualquier aumento del almacenamiento total.
 
 ## 4. Sintesis ampliada y puerta de viabilidad
@@ -115,3 +115,8 @@
 
 - `execution::run` posee buffer por llamada y comparte `eval::magma_value` sin cambiar sus comprobaciones ni el evaluador original. Ambos operandos se cargan antes de escribir; fila i conserva diagnóstico lógico i+1.
 - Cinco pruebas de ejecución/plan satisfactorias: coincidencia diferencial, raíces repetidas/One, sobrescritura del operando repetido, presupuestos lógicos y mismos errores/nodos de dominio y overflow. Suite release: 47 pruebas y 20 doctests; Clippy de todos los targets satisfactorio.
+
+## Evidencia de liveness (3.3)
+
+- Nueve pruebas específicas satisfactorias; añadidos diamante/último uso simultáneo, raíces intermedias, errores intercalados/reintentos y 32 DAGs compartidos deterministas. Un oráculo de identidades lógicas comprueba las lecturas independientemente de los valores numéricos.
+- Cadena estable de 10000 pasos: 10001 nodos, dos posiciones (16 bytes), equivalencia bajo `1e-12 + 1e-12*abs(ref)`, rechazo con una posición. Nodos, pares, raíces y estadísticas permanecen intactos; Clippy sin advertencias.

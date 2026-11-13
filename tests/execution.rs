@@ -1,8 +1,8 @@
 use emllm::{
     eval::{EvalError, EvalErrorKind, evaluate},
-    execution::{PlanError, PlanLimits, plan, run},
-    expr::Arena,
-    program::compile,
+    execution::{ExecutionPlan, PlanError, PlanLimits, plan, run},
+    expr::{Arena, Node},
+    program::{Program, ProgramStats, compile},
 };
 
 const LIMITS: PlanLimits = PlanLimits {
@@ -185,5 +185,162 @@ fn execution_preserves_domain_overflow_and_logical_budget_errors() {
                 }
             );
         }
+    }
+}
+
+fn snapshot(program: &Program) -> (Vec<Node>, Vec<[usize; 2]>, Vec<usize>, ProgramStats) {
+    (
+        program.nodes().collect(),
+        program.pairs().to_vec(),
+        program.roots().to_vec(),
+        *program.stats(),
+    )
+}
+
+// Oráculo estructural independiente: cada posición guarda la identidad lógica,
+// no un valor. Detecta liberaciones prematuras aun cuando el valor coincida.
+fn check_live_identities(p: &ExecutionPlan<'_>) {
+    let mut identities = vec![None; p.stats().slots];
+    identities[0] = Some(0);
+    for (row, ([left, right, destination], &[a, b])) in
+        p.instructions().zip(p.program().pairs()).enumerate()
+    {
+        assert_eq!(identities[left], Some(a));
+        assert_eq!(identities[right], Some(b));
+        assert_ne!(destination, 0);
+        identities[destination] = Some(row + 1);
+    }
+    for (&slot, &root) in p.root_slots().iter().zip(p.program().roots()) {
+        assert_eq!(identities[slot], Some(root));
+    }
+}
+
+#[test]
+fn diamond_and_simultaneous_last_uses_preserve_intermediate_roots() {
+    let mut arena = Arena::new(5);
+    let one = arena.one().unwrap();
+    let shared = arena.magma(&one, &one).unwrap();
+    let left = arena.magma(&one, &shared).unwrap();
+    let right = arena.magma(&shared, &shared).unwrap();
+    let root = arena.magma(&left, &right).unwrap();
+    for roots in [vec![root.clone()], vec![shared.clone(), root, shared]] {
+        let program = compile(&arena, &roots, 5).unwrap();
+        let before = snapshot(&program);
+        let p = plan(&program, LIMITS).unwrap();
+        check_live_identities(&p);
+        let [l, r, d] = p.instructions().last().unwrap();
+        assert_ne!(l, r);
+        assert!(d == l || d == r);
+        assert_close(&run(&p, 5).unwrap(), &evaluate(&program, 5).unwrap());
+        assert_eq!(snapshot(&program), before);
+    }
+}
+
+#[test]
+fn stable_ten_thousand_step_chain_uses_two_slots() {
+    let mut arena = Arena::new(10_001);
+    let one = arena.one().unwrap();
+    let mut root = one.clone();
+    for _ in 0..10_000 {
+        root = arena.magma(&one, &root).unwrap();
+    }
+    let program = compile(&arena, &[root], 10_001).unwrap();
+    drop(arena);
+    let before = snapshot(&program);
+    let p = plan(
+        &program,
+        PlanLimits {
+            max_nodes: 10_001,
+            max_slots: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(program.node_count(), 10_001);
+    assert_eq!(p.stats().slots, 2);
+    assert_eq!(p.stats().value_bytes, 16);
+    check_live_identities(&p);
+    assert_close(
+        &run(&p, 10_001).unwrap(),
+        &evaluate(&program, 10_001).unwrap(),
+    );
+    assert_eq!(
+        plan(
+            &program,
+            PlanLimits {
+                max_slots: 1,
+                ..LIMITS
+            }
+        )
+        .unwrap_err(),
+        PlanError::SlotLimit { limit: 1 }
+    );
+    assert_eq!(run(&p, 10_000).unwrap_err().node, None);
+    assert_eq!(snapshot(&program), before);
+}
+
+#[test]
+fn failures_retries_and_interleaved_runs_preserve_every_snapshot() {
+    let mut arena = Arena::new(12);
+    let one = arena.one().unwrap();
+    let e = arena.magma(&one, &one).unwrap();
+    let stable = arena.magma(&one, &e).unwrap();
+    let ee = arena.magma(&e, &one).unwrap();
+    let large = arena.magma(&ee, &one).unwrap();
+    let negative = arena.magma(&one, &large).unwrap();
+    let domain = arena.magma(&one, &negative).unwrap();
+    let overflow = arena.magma(&large, &one).unwrap();
+    let good = compile(&arena, &[stable.clone(), one.clone(), stable], 12).unwrap();
+    let bad = [
+        compile(&arena, &[domain.clone(), overflow.clone()], 12).unwrap(),
+        compile(&arena, &[overflow, domain], 12).unwrap(),
+    ];
+    drop(arena);
+    let before = snapshot(&good);
+    let p = plan(&good, LIMITS).unwrap();
+    let stats = p.stats();
+    let instructions = p.instructions().collect::<Vec<_>>();
+    let expected = evaluate(&good, 12).unwrap();
+    for invalid in bad {
+        let before_bad = snapshot(&invalid);
+        let failing = plan(&invalid, LIMITS).unwrap();
+        check_live_identities(&failing);
+        assert!(failing.stats().slots < invalid.node_count());
+        for _ in 0..3 {
+            assert_close(&run(&p, 12).unwrap(), &expected);
+            assert_eq!(run(&failing, 12), evaluate(&invalid, 12));
+            assert_eq!(run(&p, 0).unwrap_err().node, None);
+            assert_close(&run(&p, 12).unwrap(), &expected);
+        }
+        assert_eq!(snapshot(&invalid), before_bad);
+    }
+    assert_eq!(snapshot(&good), before);
+    assert_eq!(p.stats(), stats);
+    assert!(p.instructions().eq(instructions));
+}
+
+#[test]
+fn deterministic_shared_dags_preserve_logical_identities_and_first_errors() {
+    for seed in 0..32 {
+        let mut arena = Arena::new(201);
+        let mut nodes = vec![arena.one().unwrap()];
+        for i in 0..200 {
+            let left = (i * 17 + seed) % nodes.len();
+            let right = (i * 7 + seed * 13) % nodes.len();
+            nodes.push(arena.magma(&nodes[left], &nodes[right]).unwrap());
+        }
+        let roots = (0..nodes.len())
+            .step_by(13)
+            .map(|i| nodes[i].clone())
+            .collect::<Vec<_>>();
+        let program = compile(&arena, &roots, 201).unwrap();
+        let before = snapshot(&program);
+        let p = plan(&program, LIMITS).unwrap();
+        check_live_identities(&p);
+        match (run(&p, 201), evaluate(&program, 201)) {
+            (Ok(actual), Ok(expected)) => assert_close(&actual, &expected),
+            (Err(actual), Err(expected)) => assert_eq!(actual, expected),
+            other => panic!("differential mismatch: {other:?}"),
+        }
+        assert_eq!(snapshot(&program), before);
     }
 }
