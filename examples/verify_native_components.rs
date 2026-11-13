@@ -78,6 +78,7 @@ fn compose(
             )?
             .gated
             .into_values(),
+        "softmax" => builder.softmax(&left)?.probabilities,
         _ => return Err("unsupported native component".into()),
     };
     Ok(builder.finish(&roots)?)

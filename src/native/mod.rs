@@ -1,6 +1,7 @@
 //! Composición nativa: presupuestos estructurales por fase.
 //! La supervisión de RSS/tiempo pertenece a las herramientas externas.
 
+pub mod attention;
 mod codec;
 pub mod components;
 mod compose;

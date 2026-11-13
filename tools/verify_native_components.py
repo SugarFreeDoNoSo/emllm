@@ -20,8 +20,8 @@ def main():
     verified = verify(args.reference_dir, args.package)
     corpus = (args.reference_dir / "corpus/corpus.json").read_bytes()
     cases = [c for c in component_cases(json.loads(corpus), args.reference_dir)
-             if c["operation"] in ("dot", "rmsnorm", "swiglu")]
-    assert Counter(c["operation"] for c in cases) == {"dot": 631, "rmsnorm": 48, "swiglu": 62}
+             if c["operation"] in ("dot", "rmsnorm", "swiglu", "softmax")]
+    assert Counter(c["operation"] for c in cases) == {"dot": 631, "rmsnorm": 48, "swiglu": 62, "softmax": 160}
     args.output_dir.mkdir(parents=True, exist_ok=False)
     write_json(args.output_dir / "cases.json", cases)
     path = args.output_dir / "components.txt"

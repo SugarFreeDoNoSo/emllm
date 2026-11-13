@@ -559,3 +559,38 @@ RSS global muestreado 30818304 bytes, máximo `wait4` **30834688 bytes**, 49 son
 Evidencia, casos, hashes y primer fallo si lo hubiera se conservan en el directorio
 indicado. `decode_with_events` expone las cinco fases de lectura al supervisor
 fuera de sus cronómetros; un fallo deja abierta su fase y conserva el diagnóstico.
+
+## RoPE y atención causal agrupada (4.3)
+
+`native::attention` recibe Q `[T,Q_heads,head_dim]`, K/V
+`[T,KV_heads,head_dim]` y escala preparada. Para stories260K son **8/4 cabezas y
+dimensión 8**. La cabeza Q `h` usa KV `h/2`; no se copian cabezas KV. Cada fila
+temporal solo construye `0..=posición`, sin términos futuros ni máscara numérica.
+Scores, shifts, exponenciales y probabilidades tienen forma
+`[8,T*(T+1)/2]`: posiciones concatenadas dentro de cada cabeza. El contexto vuelve
+a `[T,64]`. Proyecciones y productos ponderados usan la reducción balanceada.
+
+RoPE conserva pares adyacentes y calcula cuatro productos reales, con coeficientes
+`[T,4]`, y salida `(a*c-b*s,a*s+b*c)`. Sus cuatro intermedios tienen forma
+`[T,cabezas,4]`. Softmax fija el **primer score** como pivote, suma exponenciales
+con `model::add_positive` y normaliza con `divide_positive`, conservando el orden
+del corpus y evitando la regresión histórica de suma de exponentiales grandes.
+
+La prueba F64 independiente cubre tres posiciones, ocho cabezas Q/cuatro KV,
+rotaciones, scores, probabilidades y contexto; se compone con el evaluador
+prohibido. Alterar solo los valores de la última posición deja idénticos los dos
+contextos anteriores; el cambio del último coincide con su probabilidad causal.
+Se verifican también coeficientes, agrupaciones y procedencias incompatibles.
+Ambos lectores coinciden exactamente.
+
+El verificador externo incluye ahora los **160 softmax**, además de las familias
+anteriores, con cobertura exigida de **901 casos**:
+
+Resultado: **901/901**, máxima fracción del umbral **0.0020050764041026478**,
+diferencial **0**. Pasan además las dos pruebas de atención, formato y Clippy.
+
+```sh
+cargo test --release --lib native::attention
+target/tiny-model/venv/bin/python -B tools/verify_native_components.py \
+  --output-dir target/analysis/native-attention-components
+```
