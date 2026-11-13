@@ -1,0 +1,78 @@
+# Tasks
+
+## 1. Base verificada
+
+- [x] 1.1 Confirmar en `develop` la base completada de los tres cambios anteriores; registrar HEAD, estado de trabajo, Rust/target y ejecutar `cargo check --all-targets`, `cargo test --release` y `cargo run --release --example infer`. Verificar las tolerancias y contratos existentes y guardar la evidencia de partida; detener el apply si la dependencia no está disponible o falla.
+
+## 2. Checkpoint, formato y referencias reproducibles
+
+- [ ] 2.1 Fijar revisiones y dependencias de desarrollo y preparar el checkpoint original y tok512 desde las URLs de `design.md`, registrando SHA-256 y formas reales. Generar y persistir los prefijos de 8/16 IDs del texto fijado antes de ejecutar EML; verificar BOS, posiciones, configuración esperada, alias y un rechazo reproducible al alterar el hash. Documentar la receta de preparación en `docs/tiny-model.md`.
+- [ ] 2.2 Implementar `tools/import_model.py` y documentar el formato canónico v1 byte a byte, incluidos límites, endian, catálogo, alias y constantes auxiliares. Verificar igualdad de bits de todos los pesos contra el origen y dos exportaciones con contenido idéntico; añadir fixtures pequeñas y comprobaciones de formato/alias que no requieran descargar el modelo.
+- [ ] 2.3 Añadir `src/model_io.rs` con tipos validados, metadatos escalares por bits y límites explícitos, usando solo `std`. Verificar round-trip con el exportador, formas correctas y rechazos de truncamiento, versión, NaN/infinito, alias, offsets, desbordamiento de tamaños y exceso de carga antes de construir nodos; documentar API y errores junto al formato.
+- [ ] 2.4 Implementar `tools/reference.py` con referencia original F32 y fórmulas explícitas F32/F64 independientes de EML; verificar la versión explícita F32 contra el original y auditar dtype de todas las etapas, evitando conversiones ocultas a F32 en la ruta F64. Generar trazas de ambos prefijos y el corpus determinista de escalares/productos/reducciones descrito en el diseño, con hashes y procedencia por tensor/índice.
+- [ ] 2.5 Completar la documentación de datos y referencias con comandos, versiones, política de precisión y criterios de comparación; reproducir desde los archivos fijados ambas referencias y comprobar que producen 512 logits finitos por prefijo, entradas idénticas y trazas identificadas. Registrar diferencias F32/F64 como evidencia, no como resultados EML.
+
+## 3. Planificacion de memoria y ejecucion equivalente
+
+- [ ] 3.1 Añadir `execution/plan.rs` y su API privada/validada de instrucciones, plan prestado del programa, límites y estadísticas; implementar último uso, raíces vivas, One reservado y asignación determinista sin evaluar nodos. Verificar One, límites cero/exactos, mapa de raíces, plan de un programa numéricamente inválido y doctests que impidan fabricar o mutar planes.
+- [ ] 3.2 Añadir `execution/run.rs` y compartir internamente el kernel de `eval.rs`, preservando la API del evaluador original. Verificar lecturas de ambos operandos antes de escribir, raíces repetidas, comparación diferencial, presupuesto lógico antes de ejecutar y categorías/nodos de errores de dominio y desbordamiento; documentar firmas, ownership y semántica.
+- [ ] 3.3 Completar pruebas de liveness con operandos iguales, raíz intermedia, diamante, último uso simultáneo, fallos tras reutilización, reintentos y ejecuciones intercaladas. Verificar preservación de nodos/pares/raíces/estadísticas y la cadena estable de 10000 pasos con como máximo dos posiciones y error diferencial dentro de `1e-12 + 1e-12*abs(ref)`.
+- [ ] 3.4 Publicar estadísticas y una comparación reproducible del plan frente al evaluador original sobre la cadena y las tres redes existentes; verificar tamaños reales de instrucciones, programa, raíces, valores y capacidades sin atribuir payload a RSS. Actualizar `docs/architecture.md` y `docs/complexity.md` con API, límites y evidencia del ahorro de posiciones, incluyendo cualquier aumento del almacenamiento total.
+
+## 4. Sintesis ampliada y puerta de viabilidad
+
+- [ ] 4.1 Documentar en `docs/synthesis.md` la decodificación diádica y las identidades/dominios de los candidatos One/Magma para constantes y operaciones del modelo, incluyendo agrupación de reducciones y pivote de softmax. Reproducir el caso de suma 7+0 con un DAG inspeccionable y registrar su fallo real; distinguir derivaciones algebraicas, dominios propuestos y evidencia F64, sin considerar resuelta la estabilidad por disponer de una identidad.
+- [ ] 4.2 Implementar la frontera de escalares y síntesis en `synth/scalar.rs`, conservando `Rational` y sus errores. Verificar todos los valores distintos requeridos del corpus con tolerancia `1e-9 + 1e-7*abs(ref)`, pureza One/Magma, procedencia, límites y diagnósticos por bits/ubicación; incorporar fixtures pequeñas de signos, cero, magnitudes pequeñas y límites y actualizar la documentación con el dominio efectivamente verificado. Si falla un valor requerido, pausar sin marcar esta tarea completa.
+- [ ] 4.3 Implementar en `synth/model.rs` las expansiones de suma/producto con signo, negación, recíproco positivo, raíz inversa, exponencial y SiLU necesarias, sin cambiar el kernel ni evaluar durante construcción. Verificar identidades documentadas, errores y el corpus de operandos contra F64 con `1e-6 + 1e-5*abs(ref)`, además de todas las tolerancias escalares y neuronales originales; registrar cobertura, nodos y límites numéricos.
+- [ ] 4.4 Ejecutar la puerta de viabilidad con productos escalares de longitudes 8, 64 y MLP y fórmulas representativas de RMSNorm, softmax y SwiGLU construidas desde los datos fijados. Verificar todas las tolerancias del nivel correspondiente, medir V/E/R/D, posiciones y memoria, y estimar el crecimiento completo frente a límites explícitos; publicar el informe en `docs/tiny-model.md`. Marcar completa solo si todos los casos pasan y el siguiente hito cabe en los límites; cualquier fallo bloquea las secciones dependientes y requiere revisión con el usuario.
+
+## 5. Constructores tensoriales
+
+- [ ] 5.1 Añadir formas y tensores de handles en `src/tensor.rs`, con orden row-major y operaciones estructurales de indexación/reshape. Verificar dimensiones, productos de tamaños con overflow, procedencia de handles y ausencia de evaluación numérica, y documentar invariantes y errores de esta frontera.
+- [ ] 5.2 Añadir selección de embedding, proyecciones, reducciones de orden fijo, producto elemento a elemento y residuales usando las expansiones verificadas; reutilizar constantes por bits solo dentro de su arena. Verificar formas, alias, tokens fuera de rango, presupuestos y resultados de fixtures pequeñas y corpus real contra F64, inspeccionando que solo se generan One/Magma.
+- [ ] 5.3 Construir RMSNorm y SwiGLU con el epsilon y política de precisión fijados. Verificar componentes aislados contra F64 con `1e-6 + 1e-5*abs(ref)`, casos de cancelación del corpus y propagación de errores; añadir pruebas y derivaciones/documentación de la composición.
+- [ ] 5.4 Construir RoPE por pares y atención causal agrupada con ocho cabezas Q y cuatro KV, excluyendo términos futuros y usando el pivote simbólico de softmax. Verificar rotaciones, emparejamiento Q/KV, normalización, invariancia ante un token futuro y tolerancia de componentes, sin infinitos ni operaciones nativas ocultas.
+- [ ] 5.5 Completar la guía de constructores tensoriales en `docs/tiny-model.md`, con shapes, orden de reducciones y ejemplos pequeños; ejecutar los ejemplos y la suite tensorial con ambos evaluadores y comprobar presupuestos, diagnóstico lógico y los criterios numéricos definidos.
+
+## 6. Bloque y modelo completos
+
+- [ ] 6.1 Añadir `models/llama.rs` con configuración validada, constructor de un bloque y mapa de salidas diagnósticas por etapa/posición/coordenada. Comparar el primer bloque para ambos prefijos con las trazas F64 usando `1e-4 + 1e-4*abs(ref)`; verificar errores de configuración/entrada y documentar que los pesos son propios de cada bloque.
+- [ ] 6.2 Ensamblar embedding, cinco bloques, normalización final y proyección compartida, y añadir `examples/infer_tiny.rs`. Ejecutar ambos prefijos con los dos evaluadores, verificando todas las etapas, los 512 logits contra F32 con `1e-4 + 1e-4*abs(ref)` y equivalencia diferencial EML; comprobar pureza, snapshots después de liberar importación/arena y que un fallo no entrega logits parciales. Conservar capturas diagnósticas separadas de los programas con solo logits como raíces.
+- [ ] 6.3 Documentar en README y `docs/tiny-model.md` los comandos reales de importación e inferencia, límites usados, identidad de programas, errores por etapa y resultados verificados. Reproducir los comandos para 8 y 16 tokens y revisar enlaces y ejemplos; identificar explícitamente qué costes corresponden a un prompt nuevo y cuáles a un programa ya preparado.
+
+## 7. Adaptadores y comparacion entre motores
+
+- [ ] 7.1 Definir el protocolo versionado de adaptadores y añadir los modos EML original/planificado y PyTorch F32 con entradas por IDs, logits completos y tiempos por fase. Verificar correspondencia exacta de inputs, categorías de fallo y precisión/threading efectivos; documentar el protocolo y un ejemplo reproducible en `docs/benchmarks.md`.
+- [ ] 7.2 Añadir el adaptador llama2.c de revisión fijada, con CPU/un hilo, pesos F32 y estado de atención reiniciado entre corridas. Verificar 512 logits de ambos prefijos contra la referencia, ausencia de reutilización de prefijos y exactitud de IDs; registrar receta de compilación y el coste de proyectar logits en cada posición de su recorrido secuencial.
+- [ ] 7.3 Fijar revisión y conversión F32 para llama.cpp, verificar todos los tensores/alias/layout RoPE y vocabulario contra el original y añadir el adaptador de IDs/logits con GPU desactivada y un hilo. Verificar ambos prefijos dentro de tolerancia y un rechazo al alterar conversión o mapeo; documentar versiones, comandos y precisión de cachés realmente utilizados.
+- [ ] 7.4 Implementar `tools/benchmark.py` con tres calentamientos y diez repeticiones mínimas, reinicio de estado, muestras/mediana/p95, fases separadas, extremo a extremo y memoria con método/unidad/alcance. Verificar el cálculo de métricas y clasificación de una divergencia, dependencia ausente, timeout y métrica no disponible; generar JSON versionado y Markdown coherente y documentar exclusiones y política de repetición.
+- [ ] 7.5 Ejecutar la comparación de aceptación de ambos prefijos en los cinco modos, conservando hashes, comandos, versiones, muestras, logits y memoria. Verificar tolerancia elemento a elemento en las diez combinaciones y publicar resultados reproducibles en `docs/benchmarks.md`; marcar completa solo con todos los modos válidos, aunque EML no gane en tiempo o memoria.
+
+## 8. Integracion y cierre
+
+- [ ] 8.1 Ejecutar `cargo check --all-targets`, `cargo test --release`, `cargo test --doc -- --show-output`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc --no-deps` y la demostración original; ejecutar también las verificaciones externas explícitas del modelo y herramientas documentadas. Confirmar que `Cargo.toml` mantiene el runtime sin dependencias, que los contratos originales siguen pasando y que ninguna prueba omitida se cuenta como aceptación del modelo.
+- [ ] 8.2 Revisar trazabilidad entre las cuatro specs, sus escenarios y la evidencia final, comprobar enlaces/comandos documentados y ejecutar `openspec validate benchmark-tiny-model-eml --strict`. Confirmar con apply instructions que todas las tareas efectivamente implementadas están marcadas y que no queda ninguna puerta, fixture o motor requerido pendiente antes de declarar completado el cambio.
+
+## Flujo de ejecucion
+
+1. Trabajar en `develop`, después de las dependencias verificadas en 1.1. La base documental puede seguir pendiente de revisión/archivo sin que ello autorice mezclar sus cambios.
+2. Completar y verificar cada tarea antes de marcarla; crear un commit con sus cambios y su casilla antes de avanzar a la siguiente.
+3. Usar mensajes `<tipo>(benchmark-tiny-model-eml): tarea <X.Y> - <resumen>` y publicar los avances en `origin/develop`.
+4. Al cerrar o pausar un apply con avances, crear o actualizar la PR `develop` hacia `main` y entregar su enlace para revisión. Comprobar la PR vigente; no asumir que una PR anterior sigue abierta.
+5. La sección 3 es independiente de resolver la nueva aritmética, pero el orden del checklist se mantiene para poder verificar cada commit. Las secciones 5, 6 y la aceptación completa de 7 dependen de 4.4.
+6. Una comprobación fallida conserva su tarea y dependientes pendientes. No se cambia el modelo, el prefijo, el número de capas, los thresholds ni la semántica para completar una casilla; presentar el bloqueo y solicitar revisión del diseño si hace falta.
+
+## Workflow follow-up
+
+- Obtener revisión del usuario antes de merge y archivo.
+- Archivar en orden de dependencia cuando se autorice; el archivo y la sincronización de especificaciones principales no son tareas de esta implementación.
+
+## Evidencia de partida (1.1)
+
+- HEAD: `6cb85ec4beaeda202d8c8a62aa656ca836002424`, rama `develop`, sin cambios rastreados al iniciar; únicamente los artefactos nuevos de este cambio estaban sin seguimiento.
+- Dependencias: `implement-one-magma-eml` 16/16, `formalize-rust-core-contracts` 23/23 y `use-internal-pair-tables` 15/15, todas completas según el inventario actual.
+- Rust `1.92.0 (ded5c06cf 2025-12-08)`, LLVM 21.1.3, target `aarch64-apple-darwin`.
+- `cargo check --all-targets`, `cargo test --release` y `cargo run --release --example infer`: satisfactorios. Pasaron 37 pruebas y 15 doctests, sin omisiones.
+- Red original: V/E/R/D `(614,1226,1,148)`, `(676,1350,1,148)` y `(676,1350,1,150)`; errores `2.426e-14`, `9.104e-15` y `4.829e-15`, bajo `1e-6`. Se preservan las pruebas escalares de `1e-9` y `1e-8`.
+- Evidencia local: `target/analysis/tiny-baseline-20261113T010313Z/`, con comandos, códigos de salida, logs, estado Git y versiones.
+- La PR #3 fue comprobada como MERGED al iniciar este apply; hará falta una nueva PR para los avances de este cambio.
