@@ -1,4 +1,10 @@
-use std::{collections::TryReserveError, error::Error, fmt, mem::size_of};
+use std::{
+    collections::{HashMap, TryReserveError},
+    error::Error,
+    fmt,
+    hash::Hash,
+    mem::size_of,
+};
 
 /// Fases con fronteras independientes; evaluar nunca forma parte de componer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +74,12 @@ impl Resource {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativeErrorKind {
+    ForeignReference,
+    InvalidReference {
+        index: usize,
+    },
+    EmptyConstants,
+    Compile(crate::program::CompileError),
     Limit {
         resource: Resource,
         requested: usize,
@@ -98,7 +110,7 @@ impl NativeError {
         }
     }
 
-    fn allocation(phase: Phase, resource: Resource, error: TryReserveError) -> Self {
+    pub(crate) fn allocation(phase: Phase, resource: Resource, error: TryReserveError) -> Self {
         Self {
             phase,
             kind: NativeErrorKind::Allocation {
@@ -113,6 +125,14 @@ impl fmt::Display for NativeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: ", self.phase.as_str())?;
         match &self.kind {
+            NativeErrorKind::ForeignReference => {
+                write!(f, "reference belongs to another native context")
+            }
+            NativeErrorKind::InvalidReference { index } => {
+                write!(f, "invalid native reference {index}")
+            }
+            NativeErrorKind::EmptyConstants => write!(f, "at least one constant is required"),
+            NativeErrorKind::Compile(error) => write!(f, "{error}"),
             NativeErrorKind::Limit {
                 resource,
                 requested,
@@ -260,6 +280,20 @@ impl NativeLimits {
     ) -> Result<(), NativeError> {
         let count = self.checked_add(phase, resource, values.len(), additional)?;
         self.checked_bytes::<T>(phase, resource, count)?;
+        values
+            .try_reserve(additional)
+            .map_err(|error| NativeError::allocation(phase, resource, error))
+    }
+
+    pub(crate) fn reserve_map<K: Eq + Hash, V>(
+        &self,
+        phase: Phase,
+        resource: Resource,
+        values: &mut HashMap<K, V>,
+        additional: usize,
+    ) -> Result<(), NativeError> {
+        let count = self.checked_add(phase, resource, values.len(), additional)?;
+        self.checked_bytes::<(K, V)>(phase, resource, count)?;
         values
             .try_reserve(additional)
             .map_err(|error| NativeError::allocation(phase, resource, error))

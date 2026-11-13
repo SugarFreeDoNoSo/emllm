@@ -22,8 +22,9 @@ Los pares agrupan canales reales y conservan ambas componentes y su orden;
 su número de elementos no implica ahorrar el 50 % de memoria o trabajo.
 
 Están verificadas la base de datos/referencias, los presupuestos, el supervisor
-y las expansiones compartidas (1.1–1.3, 2.1); todavía no hay preparación nativa
-ni inferencia completa de este experimento. La evidencia de extracción y corpus
+y las expansiones compartidas (1.1–1.3, 2.1). Se completó y validó la base nativa
+de constantes (2.2); la plantilla y la inferencia completa siguen pendientes.
+La evidencia de extracción y corpus
 está en [síntesis](synthesis.md#constructor-estructural-compartido-benchmark-nativo-21).
 [`benchmark-tiny-model-eml`](../openspec/changes/benchmark-tiny-model-eml/tasks.md)
 conserva **13/29 tareas**, con su límite histórico de 10000000 nodos descrito en
@@ -217,3 +218,69 @@ PYTHONPATH=tools target/tiny-model/venv/bin/python -B tools/native_resources.py 
 
 El ejemplo usa una pausa controlada para verificar eventos y observación del
 proceso; no representa preparación ni rendimiento del modelo.
+
+## Base nativa completa verificada (2.2)
+
+`PreparedBase::from_stories260k` construye estructura a partir del modelo validado,
+sin IDs, oráculos ni valores evaluados. Sintetiza por bits los pesos/auxiliares,
+constantes fijas y 512 símbolos; conserva los bits originales, incluidos ceros
+con signo. Los alias referencian el mismo rango de coordenadas y raíces.
+La base posee un `Program`, mapas de tensores/vocabulario y el índice inmutable
+de pares reconstruido sobre los índices compilados. Su identidad difiere de la
+del constructor descartado; `BaseRef` rechaza referencias de otra base aunque
+coincidan sus índices. `from_constants` permite fixtures pequeñas, sin presentarlas
+como modelos ni añadir vocabulario.
+
+La compilación interna reutiliza aquí el recorrido validado existente, con sus
+mapas de estado/remapeo; el internado de construcción se libera antes. La vista
+densa de solicitudes se incorporará en 3.3. Las nuevas reservas de construcción
+usan límites/tamaños comprobados y `try_reserve`. RSS del proceso incluye también
+los temporales y asignaciones del compilador/evaluadores existentes.
+
+La herramienta verifica el SHA-256 fijo del paquete y las fuentes **antes** de
+lanzar preparación. La API Rust recibe el `Stories260K` estructuralmente validado;
+la comprobación criptográfica permanece en herramientas, como en `model_io`.
+La lectura externa se hace después de liberar paquete/modelo importado y antes
+de emitir los archivos para la segunda comprobación Python independiente.
+
+```sh
+target/tiny-model/venv/bin/python -B tools/verify_native_base.py --output-dir target/analysis/native-base-initial
+```
+
+Perfil `native-initial-v1`, SHA-256 de su JSON normalizado
+`a9c9f3eabb16981e3871da73419edb5423adf00de4ff515339b1992b8bba2532`.
+Resultado completo, con ambas evaluaciones y verificación externa:
+
+| Medida | Resultado observado |
+| --- | ---: |
+| Nodos de base, incluido One | 21498879 |
+| Profundidad | 427 |
+| Constantes distintas por bits | 260213 |
+| Tensores / símbolos de vocabulario | 52 / 512 |
+| Coordenadas propietarias / contando alias | 260162 / 292930 |
+| Preparación, incluida compilación e índice | 15.50920075 s |
+| Planificación externa | 0.17996025 s |
+| Evaluación original / planificada | 0.2963825 / 0.289569875 s |
+| Posiciones numéricas del plan | 260216 |
+| Máxima fracción del umbral de constantes | 3.126478192134047e-7 |
+| Diferencia entre evaluadores | 0 |
+
+Contabilidad residente de la base: payload de vectores **349193740 bytes**;
+capacidad **542107048 bytes**; índice de pares 21498878 entradas, capacidad
+29360128 y payload modelado **704643072 bytes**; mapa de constantes capacidad
+458752, payload modelado **7340032 bytes**; metadata inline **328 bytes**.
+Los mapas excluyen control/asignador; la identidad Arc también tiene asignación
+no observable. La base se cuenta una vez al compartirla; estas cifras no son RSS.
+
+Pico RSS muestreado durante preparación: **3476946944 bytes**. Pico muestreado
+global de carga/preparación/validación/emisión: **3789520896 bytes**;
+máximo `wait4`: **3789553664 bytes**. Fueron 132 observaciones, sin métricas
+ausentes ni límites agotados. El máximo global no es un pico exclusivo de base
+ni de composición. Es una corrida de aceptación, no una distribución de benchmark.
+
+La evidencia conserva `verification.json`, informe supervisor, logs y tres dumps
+con cada constante/raíz/valor, coordenada de tensor y símbolo de vocabulario.
+Python comprueba todos los bits, formas, alias, valores y raíces contra el paquete;
+las pruebas negativas rechazan paquete incompatible, raíz alterada y valor no
+finito. Pasan también procedencia, límites, supervivencia tras liberar fuentes,
+68 pruebas Rust, 20 doctests, Clippy y rustdoc con advertencias como errores.
