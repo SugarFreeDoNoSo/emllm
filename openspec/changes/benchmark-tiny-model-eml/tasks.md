@@ -10,7 +10,7 @@
 - [x] 2.2 Implementar `tools/import_model.py` y documentar el formato canónico v1 byte a byte, incluidos límites, endian, catálogo, alias y constantes auxiliares. Verificar igualdad de bits de todos los pesos contra el origen y dos exportaciones con contenido idéntico; añadir fixtures pequeñas y comprobaciones de formato/alias que no requieran descargar el modelo.
 - [x] 2.3 Añadir `src/model_io.rs` con tipos validados, metadatos escalares por bits y límites explícitos, usando solo `std`. Verificar round-trip con el exportador, formas correctas y rechazos de truncamiento, versión, NaN/infinito, alias, offsets, desbordamiento de tamaños y exceso de carga antes de construir nodos; documentar API y errores junto al formato.
 - [x] 2.4 Implementar `tools/reference.py` con referencia original F32 y fórmulas explícitas F32/F64 independientes de EML; verificar la versión explícita F32 contra el original y auditar dtype de todas las etapas, evitando conversiones ocultas a F32 en la ruta F64. Generar trazas de ambos prefijos y el corpus determinista de escalares/productos/reducciones descrito en el diseño, con hashes y procedencia por tensor/índice.
-- [ ] 2.5 Completar la documentación de datos y referencias con comandos, versiones, política de precisión y criterios de comparación; reproducir desde los archivos fijados ambas referencias y comprobar que producen 512 logits finitos por prefijo, entradas idénticas y trazas identificadas. Registrar diferencias F32/F64 como evidencia, no como resultados EML.
+- [x] 2.5 Completar la documentación de datos y referencias con comandos, versiones, política de precisión y criterios de comparación; reproducir desde los archivos fijados ambas referencias y comprobar que producen 512 logits finitos por prefijo, entradas idénticas y trazas identificadas. Registrar diferencias F32/F64 como evidencia, no como resultados EML.
 
 ## 3. Planificacion de memoria y ejecucion equivalente
 
@@ -100,3 +100,8 @@
 - `tools/reference.py` verifica 93 etapas originales contra F32 explícito y audita 213 etapas explícitas F32/F64 por prefijo. Todas finitas; 512 logits por recorrido/prefijo; cero divergencias con el criterio de etapa. Diez pruebas Python locales satisfactorias.
 - Fuente original intacta fijada por hash en `tools/reference.sources.json`; atención manual/eval/CPU/un hilo. Trazas con hashes por tensor e índice causal documentado en `docs/tiny-model.md`.
 - Corpus fijado: 280688 escalares distintos, 6599 operaciones, 631 reducciones completas (8/64/172) y 208 componentes. SHA-256 `d4c9207a3ea4e9b526bdc4c6b2a791cd6439586c853a8b58e6c3f9c2095677c5`; ubicación `target/tiny-model/reference/corpus/`.
+
+## Evidencia de reproduccion (2.5)
+
+- Reejecución offline en `target/analysis/tiny-reference-repeat/`; `tools/verify_reference.py` acredita 16 archivos canónicos idénticos, 1038 etapas y 388939 referencias de procedencia. Reporte SHA-256 `a853b59e12d26d3a9517d17c489069dd0bef864ebaf4d0859b6e84066771ca3f`.
+- Ambos prefijos tienen 512 logits finitos en las tres rutas. Máximos F64/original F32: `5.659565e-6` (8) y `5.016644e-6` (16), sin divergencias. Política, criterios, comandos, entorno y rango real del corpus en `docs/tiny-model.md`.

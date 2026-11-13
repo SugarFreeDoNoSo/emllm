@@ -154,3 +154,53 @@ siguiente. Su agrupación se distingue de los kernels matriciales de PyTorch.
 SHA-256 del corpus: `d4c9207a3ea4e9b526bdc4c6b2a791cd6439586c853a8b58e6c3f9c2095677c5`;
 de `scalars.u32`: `f63e3268b16a6127ac23e86ff95523894de184bffb4f4ad750fed8326f237b42`.
 Estos son oráculos externos, todavía no resultados de aritmética EML.
+
+## Reproducción y precisión de las referencias (2.5)
+
+Con las fuentes y el paquete ya preparados, los siguientes comandos no descargan
+archivos ni retokenizan las entradas de inferencia (el preparador comprueba la
+fixture original antes de consumir sus IDs):
+
+```sh
+target/tiny-model/venv/bin/python -B tools/reference.py --offline --output-dir target/analysis/tiny-reference-repeat
+target/tiny-model/venv/bin/python -B tools/verify_reference.py --compare-dir target/analysis/tiny-reference-repeat
+```
+
+La reproducción verificada produjo **16 archivos idénticos** excluyendo el
+registro ambiental: seis pares de binario/manifiesto, corpus y reporte. Se
+comprobaron 1038 tensores de etapa, 388939 referencias tensor/índice y la presencia
+de todos los bits de pesos/constantes en el corpus. El reporte contiene los 512
+logits de los tres recorridos para cada fixture. SHA-256 de `report.json`:
+`a853b59e12d26d3a9517d17c489069dd0bef864ebaf4d0859b6e84066771ca3f`.
+
+Entorno observado: macOS 26.7.2 arm64, CPython 3.12.12, PyTorch 2.9.1 y NumPy
+2.2.6; CPU, un hilo intra-op y uno inter-op. OMP/MKL/OpenBLAS/Accelerate se fijan
+a un hilo antes de importar las bibliotecas. Las operaciones deterministas están
+activadas. `environment.json` registra los valores efectivos.
+
+| Prefijo | F32 explícito vs original, máximo | F64 vs original, máximo | F64 vs original, RMS | Top-1 (tres rutas) |
+| --- | ---: | ---: | ---: | ---: |
+| 8 | 6.794930e-6 | 5.659565e-6 | 3.023752e-6 | 261 |
+| 16 | 8.583069e-6 | 5.016644e-6 | 2.495596e-6 | 338 |
+
+Los criterios permanecen fijados: constantes `1e-9 + 1e-7*abs(ref)`; componentes
+`1e-6 + 1e-5*abs(ref)`; etapas/logits `1e-4 + 1e-4*abs(ref)`; diferencia entre
+evaluadores EML `1e-12 + 1e-12*abs(ref)`. NaN/infinito invalida un caso completo.
+Las métricas de esta tabla comparan todos los logits; top-1 es solo diagnóstico.
+La máxima fracción del umbral entre etapas originales/F32 explícitas es 0.151924
+(8) y 0.128250 (16). Entre las 213 etapas explícitas F64/F32 es 0.103418 y
+0.182681, respectivamente. Todos los elementos pasan.
+
+La comparación conserva diferencias legítimas: división por `sqrt(8)` en el
+original frente a multiplicación por escala F32 canónica; softmax original con
+su kernel frente a exponenciales respecto del primer score; SiLU original frente
+a su fórmula explícita; acumulaciones F32/F64. No se cambian las tolerancias para
+compensarlas. Los oráculos de componentes usan **operandos F32 de las trazas
+elevados a F64**, mientras la referencia completa F64 propaga activaciones F64.
+
+El corpus evidencia un rango amplio: mínimo `-48.26185607910156` en
+`prefix16/layers.1.scores[489]`, máximo `2.781185048576e12` en
+`prefix16/layers.1.score_exp[756]` y menor magnitud no nula `2.1137395426764934e-23`
+en `prefix16/layers.1.probabilities[489]`. Estas magnitudes forman parte de la
+puerta pendiente de síntesis; la finitud de PyTorch no demuestra que EML pueda
+representarlas o ejecutar las operaciones dentro de los límites.
