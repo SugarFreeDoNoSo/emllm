@@ -6,6 +6,10 @@ use std::fmt;
 
 use crate::expr::{Arena, BuildError, NodeId, PairTable};
 
+mod dense;
+pub use dense::DenseCompileStorage;
+pub(crate) use dense::{DenseCompileError, compile_dense};
+
 /// Forma cerrada de los nodos que expone la inspección del programa.
 pub use crate::expr::Node;
 
@@ -13,7 +17,7 @@ pub use crate::expr::Node;
 ///
 /// Posee su tabla de pares y raíces: ampliar o liberar la arena no lo cambia.
 /// One está implícito en el índice 0; la fila k representa el nodo k+1.
-/// Solo [`compile`] puede producirlo desde una construcción. Clonarlo copia un
+/// La compilación validada lo produce desde una construcción. Clonarlo copia un
 /// snapshot ya válido; no concede acceso mutable a sus campos.
 ///
 /// ```
@@ -204,7 +208,7 @@ pub fn compile(arena: &Arena, roots: &[NodeId], max_nodes: usize) -> Result<Prog
     compile_nodes(|index| arena.node(index), &roots, max_nodes)
 }
 
-fn compile_nodes(
+pub(crate) fn compile_nodes(
     source: impl Fn(usize) -> Option<Node>,
     roots: &[usize],
     max_nodes: usize,
