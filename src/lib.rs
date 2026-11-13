@@ -69,6 +69,7 @@
 #![forbid(unsafe_code)]
 
 pub mod eval;
+pub mod execution;
 pub mod expr;
 pub mod model_io;
 pub mod network;

@@ -14,7 +14,7 @@
 
 ## 3. Planificacion de memoria y ejecucion equivalente
 
-- [ ] 3.1 Añadir `execution/plan.rs` y su API privada/validada de instrucciones, plan prestado del programa, límites y estadísticas; implementar último uso, raíces vivas, One reservado y asignación determinista sin evaluar nodos. Verificar One, límites cero/exactos, mapa de raíces, plan de un programa numéricamente inválido y doctests que impidan fabricar o mutar planes.
+- [x] 3.1 Añadir `execution/plan.rs` y su API privada/validada de instrucciones, plan prestado del programa, límites y estadísticas; implementar último uso, raíces vivas, One reservado y asignación determinista sin evaluar nodos. Verificar One, límites cero/exactos, mapa de raíces, plan de un programa numéricamente inválido y doctests que impidan fabricar o mutar planes.
 - [ ] 3.2 Añadir `execution/run.rs` y compartir internamente el kernel de `eval.rs`, preservando la API del evaluador original. Verificar lecturas de ambos operandos antes de escribir, raíces repetidas, comparación diferencial, presupuesto lógico antes de ejecutar y categorías/nodos de errores de dominio y desbordamiento; documentar firmas, ownership y semántica.
 - [ ] 3.3 Completar pruebas de liveness con operandos iguales, raíz intermedia, diamante, último uso simultáneo, fallos tras reutilización, reintentos y ejecuciones intercaladas. Verificar preservación de nodos/pares/raíces/estadísticas y la cadena estable de 10000 pasos con como máximo dos posiciones y error diferencial dentro de `1e-12 + 1e-12*abs(ref)`.
 - [ ] 3.4 Publicar estadísticas y una comparación reproducible del plan frente al evaluador original sobre la cadena y las tres redes existentes; verificar tamaños reales de instrucciones, programa, raíces, valores y capacidades sin atribuir payload a RSS. Actualizar `docs/architecture.md` y `docs/complexity.md` con API, límites y evidencia del ahorro de posiciones, incluyendo cualquier aumento del almacenamiento total.
@@ -105,3 +105,8 @@
 
 - Reejecución offline en `target/analysis/tiny-reference-repeat/`; `tools/verify_reference.py` acredita 16 archivos canónicos idénticos, 1038 etapas y 388939 referencias de procedencia. Reporte SHA-256 `a853b59e12d26d3a9517d17c489069dd0bef864ebaf4d0859b6e84066771ca3f`.
 - Ambos prefijos tienen 512 logits finitos en las tres rutas. Máximos F64/original F32: `5.659565e-6` (8) y `5.016644e-6` (16), sin divergencias. Política, criterios, comandos, entorno y rango real del corpus en `docs/tiny-model.md`.
+
+## Evidencia de planificacion (3.1)
+
+- `execution::plan` deriva instrucciones privadas de tres índices, presta el programa y conserva raíces/One mediante últimos usos y asignación determinista. Límites de nodos/posiciones separados, reserva falible y estadísticas de payload/capacidad.
+- Tres pruebas específicas satisfactorias: One y límites 0/exactos, raíces vivas/duplicadas y planificación sin evaluar de un programa que desborda. Pasaron 19 doctests; nuevos controles negativos E0451/E0594/E0505 acreditan privacidad, inmutabilidad y préstamo. Clippy de todos los targets sin advertencias.
