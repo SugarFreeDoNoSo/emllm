@@ -137,3 +137,11 @@
 - `synth/scalar.rs` implementa decodificación entera diádica, mantisa fraccionaria y H/D; conserva `Rational`. Fixtures de signos, cero, magnitudes, límites exactos y procedencia satisfactorias.
 - `tools/verify_scalar_corpus.py`: **280688/280688** valores pasan con ambos evaluadores, pureza y tolerancias fijadas. Máximos V=829, D=823, posiciones=8; fracción máxima del umbral `3.126478192134047e-7`; 12.685 s. Sin valores excluidos ni fallidos. Evidencia: `target/analysis/scalar-synthesis/report.json`.
 - Suite release: 55 pruebas y 20 doctests; Clippy y documentación con advertencias denegadas satisfactorios. Dominio concreto acreditado y límites documentados; operaciones compuestas pendientes.
+
+## Bloqueo de operaciones (4.3 pendiente)
+
+- Implementados candidatos estructurales en `synth/model.rs` y verificación trazable del corpus. La casilla 4.3 sigue pendiente: falla el producto del caso 10, bits `0x3f8afc5f` en ambos operandos, `prefix8/explicit_f32/embedding[301]`, cuadrado requerido por RMSNorm.
+- Valor exacto `1.0858267545700073`, producto esperado `1.179019740940035`; ambos evaluadores devuelven `ExponentialOverflow` en nodo lógico 312 `Magma(311,0)`. V/E/R/D=356/710/1/301, diez posiciones, sin agotar límites de 100000 nodos/posiciones.
+- Diez casos pasan, uno falla, 6588 no verificados. Reproducción local sin descargas: `cargo run --release --example verify_operations -- tests/fixtures/tiny-operation-blocker.txt` (salida 1). Evidencia con procedencia/hashes: `target/analysis/operation-synthesis/report.json`.
+- También falla la prueba candidata local de SiLU para x=1.5 (nodo 210). Permanece activa; el conjunto de pruebas nuevo no se declara satisfactorio. Las 18 pruebas de síntesis original/red/ejecución pasan; Clippy satisfactorio.
+- Apply pausado en **12/29 tareas completas** para revisión de expansiones/intermedios. Puerta 4.4, tensores, Transformer y aceptación de motores continúan pendientes.

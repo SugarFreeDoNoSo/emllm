@@ -9,6 +9,7 @@ use std::fmt;
 
 use crate::expr::{Arena, BuildError, NodeId};
 
+pub mod model;
 pub mod scalar;
 
 /// Racional normalizado de la frontera de construcción, no un nodo ejecutable.

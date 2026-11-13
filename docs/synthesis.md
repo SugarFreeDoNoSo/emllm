@@ -324,3 +324,48 @@ sintetizados aún puede fallar. La siguiente puerta debe verificar esas operacio
 `target/analysis/scalar-synthesis/report.json` conserva comandos, límites,
 revisión, hashes de fuentes/corpus, toolchain y contadores. Las 55 pruebas Rust
 y 20 doctests pasan, incluidos los contratos y tolerancias originales.
+
+## Bloqueo de operaciones compuestas (4.3 pendiente)
+
+`synth::model` incorpora los candidatos A/E/F/N/S y las composiciones R/U/SiLU
+anteriores. Los constructores siguen siendo estructurales y propagan errores de
+presupuesto/procedencia. La validación numérica **no pasa**: su presencia en la
+API no acredita soporte del modelo ni de todo el corpus.
+
+```sh
+target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py
+# Reproducción mínima, sin checkpoint ni Python:
+cargo run --release --example verify_operations -- tests/fixtures/tiny-operation-blocker.txt
+```
+
+Ambos comandos terminan con código 1. El primer fallo del corpus es el caso de
+índice 10 (base cero), después de diez casos satisfactorios:
+
+- Familia: `prefix8/explicit_f32/layers.0.attention_norm.squares[4]`.
+- Ambos operandos: `embedding[301]` (posición 4, coordenada 45), bits
+  **`0x3f8afc5f`**, valor F32 exacto **1.0858267545700073**.
+- Producto F64 esperado: **1.179019740940035**.
+- Programa One/Magma: V=356, E=710, R=1, D=301, diez posiciones.
+- Ambos evaluadores: **`ExponentialOverflow` en el nodo lógico 312**, expresión
+  `Magma(311,0)`. No se entregan resultados parciales.
+- Quedan 6588 de las 6599 operaciones sin verificar. Ninguna reducción completa
+  ni componente de la puerta 4.4 ha sido aceptado mediante estas expansiones.
+
+Los límites eran 100000 nodos por etapa y 100000 posiciones; no se agotaron.
+La carga del protocolo de desarrollo se acota a 2 MiB. El archivo `EMLOPS1`
+contiene nombre de operación, bits F32 de hasta dos operandos y oráculo F64;
+solo los bits entran a la síntesis y el oráculo se usa después de evaluar.
+`target/analysis/operation-synthesis/` conserva corpus completo de operaciones,
+caso mínimo, salida, categoría, procedencia, hashes, comando, toolchain y revisión.
+
+Además, la prueba local activa
+`candidate_reciprocal_root_and_silu_match_small_independent_cases` falla para
+x=1.5 en la composición de SiLU: overflow en nodo 210, raíces `[58,149,258]`.
+Las pruebas de dominio/procedencia/presupuesto pasan. Las 18 pruebas originales
+de síntesis/red y del plan pasan con sus tolerancias; la suite completa nueva
+queda **fallida**, no se acredita por los éxitos previos de la tarea 4.2.
+
+El fallo demuestra que la expansión candidata del producto no es numéricamente
+apta ni siquiera para este cuadrado moderado; no demuestra imposibilidad de
+otra expansión One/Magma. El apply queda pausado en 4.3 para revisar las
+expansiones y sus rangos de intermedios antes de las tareas dependientes.
