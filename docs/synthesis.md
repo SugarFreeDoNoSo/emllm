@@ -222,9 +222,10 @@ todavía usa exponenciales de la magnitud: no se afirma soporte numérico de tod
 los F32 negativos. La implementación debe verificar **cada** escalar del corpus,
 incluidos sus extremos documentados, y detenerse ante cualquier fallo requerido.
 
-### Operaciones candidatas del modelo
+### Operaciones candidatas iniciales del modelo (histórico 4.1)
 
-Se mantienen como candidatos iniciales A, N, S y F de las derivaciones anteriores.
+Se propusieron como candidatos iniciales A, N, S y F de las derivaciones anteriores.
+La implementación revisada de 4.3 se deriva al final de esta guía.
 Para las operaciones restantes:
 
 | Operación | Expansión | Dominio real adicional |
@@ -325,12 +326,10 @@ sintetizados aún puede fallar. La siguiente puerta debe verificar esas operacio
 revisión, hashes de fuentes/corpus, toolchain y contadores. Las 55 pruebas Rust
 y 20 doctests pasan, incluidos los contratos y tolerancias originales.
 
-## Bloqueo de operaciones compuestas (4.3 pendiente)
+## Bloqueo histórico de operaciones compuestas (4.3 inicial)
 
-`synth::model` incorpora los candidatos A/E/F/N/S y las composiciones R/U/SiLU
-anteriores. Los constructores siguen siendo estructurales y propagan errores de
-presupuesto/procedencia. La validación numérica **no pasa**: su presencia en la
-API no acredita soporte del modelo ni de todo el corpus.
+En `3a277e0`, `synth::model` incorporaba los candidatos A/E/F/N/S y las
+composiciones R/U/SiLU anteriores. Esa validación numérica **no pasó**.
 
 ```sh
 target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py
@@ -338,7 +337,7 @@ target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py
 cargo run --release --example verify_operations -- tests/fixtures/tiny-operation-blocker.txt
 ```
 
-Ambos comandos terminan con código 1. El primer fallo del corpus es el caso de
+En esa revisión ambos comandos terminaron con código 1. El primer fallo fue el caso de
 índice 10 (base cero), después de diez casos satisfactorios:
 
 - Familia: `prefix8/explicit_f32/layers.0.attention_norm.squares[4]`.
@@ -358,14 +357,122 @@ solo los bits entran a la síntesis y el oráculo se usa después de evaluar.
 `target/analysis/operation-synthesis/` conserva corpus completo de operaciones,
 caso mínimo, salida, categoría, procedencia, hashes, comando, toolchain y revisión.
 
-Además, la prueba local activa
-`candidate_reciprocal_root_and_silu_match_small_independent_cases` falla para
+Además, la prueba local
+`candidate_reciprocal_root_and_silu_match_small_independent_cases` falló para
 x=1.5 en la composición de SiLU: overflow en nodo 210, raíces `[58,149,258]`.
-Las pruebas de dominio/procedencia/presupuesto pasan. Las 18 pruebas originales
-de síntesis/red y del plan pasan con sus tolerancias; la suite completa nueva
-queda **fallida**, no se acredita por los éxitos previos de la tarea 4.2.
+Las pruebas de dominio/procedencia/presupuesto pasaron. Las 18 pruebas originales
+de síntesis/red y del plan pasaron con sus tolerancias; la suite nueva quedó
+**fallida** en esa revisión.
 
 El fallo demuestra que la expansión candidata del producto no es numéricamente
 apta ni siquiera para este cuadrado moderado; no demuestra imposibilidad de
-otra expansión One/Magma. El apply queda pausado en 4.3 para revisar las
-expansiones y sus rangos de intermedios antes de las tareas dependientes.
+otra expansión One/Magma. El primer término positivo del producto era
+`u=exp(x)^2≈8.77278`; la primera resta intentaba `exp(exp(u)-u+v)` con
+exponente ≈6452.866. La revisión siguiente evita ese intermedio.
+
+## Expansiones desplazadas y normalizadas verificadas (4.3)
+
+`synth::model` mantiene E y usa las siguientes identidades. A, L y z conservan
+sus definiciones originales; solo se invoca A con operandos acotados y una
+orientación fija. Todas las constantes se sintetizan desde One/Magma.
+
+### Reflexiones, suma y resta
+
+```text
+R_c(x) = M(L(c), E(x)) = c-x                     (c>0)
+N_m(x) = R_1(R_2(R_1(x))) = -x
+T(x)   = R_128(N_m(x)) = 128+x
+A_m(x,y) = M(L(T(x)), E(R_128(y))) = x+y         (x>-128)
+S_m(x,y) = A_m(x,N_m(y)) = x-y                   (x>-128)
+```
+
+Las tres reflexiones de N_m producen `1-x`, `1+x`, `-x`. La suma resta
+`128-y` a `128+x`. El desplazamiento positivo permite L(T(x)) sin
+descomponer x en diferencias de exponenciales. En F64 todavía se requieren
+exponenciales finitas/no nulas de x, 1±x y 128-y; estas son condiciones
+numéricas adicionales, no garantías derivadas únicamente de x>-128.
+
+### Escala firmada y producto
+
+Para s>0 y x>-128:
+
+```text
+B_s(x) = M(A(L(s),L(T(x))), E(128*s)) = s*x
+u = B_(1/64)(x); v = B_(1/64)(y)
+q = M(A(L(A(1,u)),L(A(1,v))), E(A(1,A(u,v))))
+  = (1+u)*(1+v) - (1+u+v) = u*v
+F_m(x,y) = doce aplicaciones q <- A_m(q,q) = x*y
+```
+
+El primer argumento de A en B_s es siempre L(s), fijado antes de construir.
+Las parejas de constantes `(s,128*s)` son `(1/64,2)` y `(1/2,64)`;
+sus bits F32 son `0x3c800000/0x40000000` y `0x3f000000/0x42800000`.
+El centro 128 tiene bits `0x43000000`. No se evalúa ningún operando para
+elegir un centro, una escala o el número de duplicaciones.
+
+Un dominio real suficiente propuesto para F_m es `|x|,|y|<=32` y `x*y>-256`:
+u,v están en [-1/2,1/2], por lo que 1+u y 1+v son positivos. Cada entrada a
+las doce duplicaciones negativas es mayor que -128; las positivas no tienen
+esa restricción real. Las cancelaciones en q y las duplicaciones amplifican
+el error; el dominio no promete una cota F64 uniforme. La evidencia siguiente
+cubre los casos concretos fijados, además de las regresiones locales de signos,
+cancelación, `7+0`, `32*32`, `-32*7` y el cuadrado que fallaba.
+
+### Recíproco, raíz inversa y SiLU
+
+```text
+R_m(x) = E(N_m(L(x))) = 1/x                     (x>0)
+U_m(x) = E(N_m(B_(1/2)(L(x)))) = 1/sqrt(x)      (x>0, ln(x)>-128)
+d = M(N_m(x),E(-1)) = exp(-x)+1
+SiLU_m(x) = F_m(x,R_m(d))
+```
+
+La raíz inversa usa B_(1/2) en lugar del producto general. SiLU construye
+directamente su denominador mediante Magma; -1 es un racional sintetizado.
+La composición SiLU debe satisfacer además el dominio de F_m y las condiciones
+numéricas de cada subexpresión. Ninguna de estas fórmulas usa clamps, hojas
+numéricas ni cambios del kernel. Los errores de dominio, overflow, presupuesto
+y procedencia siguen propagándose.
+
+### Cobertura y límites comprobados
+
+```sh
+cargo test --release --test model_synthesis
+cargo run --release --example verify_operations -- tests/fixtures/tiny-operation-blocker.txt
+target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py \
+  --output-dir target/analysis/operation-synthesis-revised
+```
+
+Los tres comandos pasan. Se verifican **6599/6599 operaciones** con ambos
+evaluadores y `1e-6 + 1e-5*abs(ref)`, sobre el corpus original de SHA-256
+`d4c9207a3ea4e9b526bdc4c6b2a791cd6439586c853a8b58e6c3f9c2095677c5`:
+
+| Operación | Casos | Rango de operandos observado (aproximado) |
+| --- | ---: | --- |
+| Producto | 4314 | [-21.922198, 28.029603] |
+| Suma | 567 | [-26.296731, 28.456139] |
+| Resta | 1275 | [-34.019066, 26.285544] |
+| Negación | 70 | [-4.095533, 4.215379] |
+| Recíproco | 60 | [1.014766, 61.071312] |
+| Raíz inversa | 103 | [0.03967469, 5.433550] |
+| Exponencial | 140 | [-28.472718, 28.653899] |
+| SiLU | 70 | [-4.095533, 4.215379] |
+
+Productos esperados entre -117.218386 y 74.702185. Máximos por programa:
+V=1013, E=2024, R=1, D=569 y 17 posiciones; estos máximos pueden corresponder
+a casos distintos. Mayor fracción del umbral `0.00025848092631870485`,
+diferencia entre evaluadores cero. Máximo error absoluto `0.05908203125`, en
+un corpus con exponenciales de hasta `2.7811850760220205e12`; no es una cota
+para las operaciones pequeñas. Recorrido observado: 1.325 s, excluyendo
+verificación de fuentes y compilación Rust.
+
+Se conservan los límites de 100000 nodos por etapa, 100000 posiciones y 2 MiB
+de protocolo, además de la inspección One/Magma y los oráculos externos.
+La evidencia revisada y hashes de código están en
+`target/analysis/operation-synthesis-revised/report.json`; el fallo anterior
+se conserva en `target/analysis/operation-synthesis/`. La fixture histórica
+ahora pasa con V/E/R/D=601/1200/1/443 y 13 posiciones.
+
+Las 58 pruebas Rust y 20 doctests pasan; Clippy sin advertencias. Las tolerancias
+originales siguen vigentes. Pasar estas operaciones aisladas no demuestra las
+reducciones completas, RMSNorm, softmax ni SwiGLU: requieren la puerta 4.4.

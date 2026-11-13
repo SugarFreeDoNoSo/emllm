@@ -16,7 +16,14 @@ const MAX_BYTES: usize = 2 * 1024 * 1024;
 const MAX_NODES: usize = 100_000;
 const MAX_SLOTS: usize = 100_000;
 
-fn check(operation: &str, operands: &[F32Bits], expected: f64) -> Result<[usize; 3], String> {
+struct CaseStats {
+    structure: [usize; 3],
+    absolute_error: f64,
+    threshold_fraction: f64,
+    differential_fraction: f64,
+}
+
+fn check(operation: &str, operands: &[F32Bits], expected: f64) -> Result<CaseStats, String> {
     let mut arena = Arena::new(MAX_NODES);
     let inputs = operands
         .iter()
@@ -81,7 +88,12 @@ fn check(operation: &str, operands: &[F32Bits], expected: f64) -> Result<[usize;
             "differential: original={actual}, planned={optimized}"
         ));
     }
-    Ok([program.node_count(), program.stats().depth, p.stats().slots])
+    Ok(CaseStats {
+        structure: [program.node_count(), program.stats().depth, p.stats().slots],
+        absolute_error: (actual - expected).abs(),
+        threshold_fraction: (actual - expected).abs() / bound,
+        differential_fraction: (optimized - actual).abs() / (1e-12 + 1e-12 * actual.abs()),
+    })
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -139,12 +151,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let start = Instant::now();
     let mut maxima = [0; 3];
+    let mut max_absolute_error = 0.0_f64;
+    let mut max_threshold_fraction = 0.0_f64;
+    let mut max_differential_fraction = 0.0_f64;
     for (index, (operation, operands, expected)) in cases.iter().enumerate() {
         match check(operation, operands, *expected) {
             Ok(stats) => {
-                for (max, value) in maxima.iter_mut().zip(stats) {
+                for (max, value) in maxima.iter_mut().zip(stats.structure) {
                     *max = (*max).max(value);
                 }
+                max_absolute_error = max_absolute_error.max(stats.absolute_error);
+                max_threshold_fraction = max_threshold_fraction.max(stats.threshold_fraction);
+                max_differential_fraction =
+                    max_differential_fraction.max(stats.differential_fraction);
             }
             Err(message) => {
                 let bits = operands.iter().map(|v| v.bits()).collect::<Vec<_>>();
@@ -157,7 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     println!(
-        "{{\"status\":\"ok\",\"total\":{total},\"max_nodes\":{},\"max_depth\":{},\"max_slots\":{},\"elapsed_seconds\":{}}}",
+        "{{\"status\":\"ok\",\"total\":{total},\"max_nodes\":{},\"max_depth\":{},\"max_slots\":{},\"max_absolute_error\":{max_absolute_error},\"max_threshold_fraction\":{max_threshold_fraction},\"max_differential_fraction\":{max_differential_fraction},\"elapsed_seconds\":{}}}",
         maxima[0],
         maxima[1],
         maxima[2],

@@ -216,26 +216,27 @@ con `1e-9 + 1e-7*abs(ref)`. Máximos por escalar: 829 nodos, profundidad 823 y o
 posiciones numéricas; límites de 10000 nodos/posiciones. Máxima fracción del
 umbral: `3.1264782e-7`. La receta, dominio verificado y límites están en
 [síntesis](synthesis.md#dominio-escalar-efectivamente-verificado-42); evidencia
-en `target/analysis/scalar-synthesis/`. Las operaciones compuestas y el modelo
-completo todavía requieren sus propias puertas.
+en `target/analysis/scalar-synthesis/`. El modelo completo requiere las puertas
+de operaciones y componentes además de esta síntesis escalar.
 
-## Estado de la puerta de operaciones: bloqueado en 4.3
+## Puerta de operaciones verificada (4.3)
 
-Las constantes pasaron, pero las operaciones compuestas no. El caso 10 del
-corpus exige cuadrar `embedding[301]` del prefijo de ocho tokens:
-`1.0858267545700073²`, bits `0x3f8afc5f` en ambos operandos. El producto esperado
-es `1.179019740940035`; la expansión candidata desborda en el nodo lógico 312
-con ambos evaluadores. Es una entrada real a RMSNorm del primer bloque.
+La suma desplazada, el producto normalizado y el denominador directo de SiLU
+superan **6599/6599 operaciones**, con ambos evaluadores y la tolerancia fijada
+`1e-6 + 1e-5*abs(ref)`. Máximos por programa: V=1013, E=2024, R=1, D=569,
+17 posiciones. La mayor fracción del umbral es `0.00025848092631870485`;
+diferencia entre evaluadores cero. Límites: 100000 nodos/posiciones.
 
 ```sh
-target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py
+target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py \
+  --output-dir target/analysis/operation-synthesis-revised
 cargo run --release --example verify_operations -- tests/fixtures/tiny-operation-blocker.txt
 ```
 
-Estos comandos reproducen el fallo (salida 1). Pasaron diez operaciones antes
-del fallo y las 6588 posteriores permanecen sin verificar. La prueba local de
-SiLU también falla para x=1.5. La tarea 4.3 y las dependientes siguen pendientes;
-no hay ejecución del Transformer en EML ni comparación de motores completa.
-Diagnóstico, presupuestos y evidencia: [síntesis](synthesis.md#bloqueo-de-operaciones-compuestas-43-pendiente)
-y `target/analysis/operation-synthesis/report.json`. Se requiere revisión de las
-expansiones numéricas antes de continuar.
+Ambos comandos pasan, incluida la fixture de `1.0858267545700073²` que fallaba
+en `3a277e0`. También pasa la prueba local de SiLU para x=1.5. Identidades,
+dominios y cobertura en [síntesis](synthesis.md#expansiones-desplazadas-y-normalizadas-verificadas-43);
+evidencia en `target/analysis/operation-synthesis-revised/report.json`.
+Se conserva el fallo histórico en `target/analysis/operation-synthesis/`.
+Las reducciones y componentes completos tienen su propia puerta 4.4; todavía
+no hay ejecución del Transformer en EML ni comparación completa de motores.

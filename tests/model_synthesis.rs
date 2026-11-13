@@ -120,14 +120,73 @@ fn candidate_reciprocal_root_and_silu_match_small_independent_cases() {
         let inverse_root = model::inverse_sqrt(&mut arena, &input).unwrap();
         let silu = model::silu(&mut arena, &input).unwrap();
         let program = compile(&arena, &[reciprocal, inverse_root, silu], 10_000).unwrap();
+        let p = plan(
+            &program,
+            PlanLimits {
+                max_nodes: 10_000,
+                max_slots: 10_000,
+            },
+        )
+        .unwrap();
         let x = f64::from(x);
         let expected = [1.0 / x, 1.0 / x.sqrt(), x / (1.0 + (-x).exp())];
-        for (actual, reference) in evaluate(&program, 10_000)
-            .unwrap_or_else(|error| panic!("candidate x={x}, roots={:?}: {error}", program.roots()))
+        let original = evaluate(&program, 10_000).unwrap_or_else(|error| {
+            panic!("candidate x={x}, roots={:?}: {error}", program.roots())
+        });
+        for ((actual, optimized), reference) in original
             .into_iter()
+            .zip(run(&p, 10_000).unwrap())
             .zip(expected)
         {
             assert!((actual - reference).abs() <= 1e-6 + 1e-5 * reference.abs());
+            assert!((optimized - actual).abs() <= 1e-12 + 1e-12 * actual.abs());
+        }
+    }
+}
+
+#[test]
+fn shifted_arithmetic_handles_signs_cancellation_and_historical_overflow() {
+    use emllm::synth::model;
+    let blocker = f32::from_bits(0x3f8a_fc5f);
+    for (x, y) in [
+        (blocker, blocker),
+        (7.0, 0.0),
+        (-32.0, 7.0),
+        (7.0, -32.0),
+        (32.0, 32.0),
+        (-0.5, -0.5),
+        (1e-5, -1e-5),
+        (0.0, 0.0),
+    ] {
+        let mut arena = Arena::new(10_000);
+        let a = synthesize(&mut arena, F32Bits::new(x.to_bits()).unwrap()).unwrap();
+        let b = synthesize(&mut arena, F32Bits::new(y.to_bits()).unwrap()).unwrap();
+        let roots = [
+            model::add(&mut arena, &a, &b).unwrap(),
+            model::sub(&mut arena, &a, &b).unwrap(),
+            model::mul(&mut arena, &a, &b).unwrap(),
+            model::neg(&mut arena, &a).unwrap(),
+        ];
+        let program = compile(&arena, &roots, 10_000).unwrap();
+        drop(arena);
+        let p = plan(
+            &program,
+            PlanLimits {
+                max_nodes: 10_000,
+                max_slots: 10_000,
+            },
+        )
+        .unwrap();
+        let (x, y) = (f64::from(x), f64::from(y));
+        let expected = [x + y, x - y, x * y, -x];
+        let original = evaluate(&program, 10_000).unwrap();
+        let planned = run(&p, 10_000).unwrap();
+        for ((actual, optimized), reference) in original.into_iter().zip(planned).zip(expected) {
+            assert!(
+                (actual - reference).abs() <= 1e-6 + 1e-5 * reference.abs(),
+                "x={x}, y={y}, actual={actual}, expected={reference}"
+            );
+            assert!((optimized - actual).abs() <= 1e-12 + 1e-12 * actual.abs());
         }
     }
 }
