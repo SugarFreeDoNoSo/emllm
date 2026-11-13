@@ -318,6 +318,24 @@ impl Builder for TemplateBuilder {
     }
 }
 
+impl super::tensor::TensorBuilder for TemplateBuilder {
+    fn phase(&self) -> Phase {
+        Phase::Template
+    }
+    fn limits(&self) -> NativeLimits {
+        self.limits
+    }
+    fn base(&self) -> &Arc<PreparedBase> {
+        &self.base
+    }
+    fn import_base(&self, reference: &BaseRef) -> Result<TemplateRef, NativeError> {
+        self.base_reference(reference)
+    }
+    fn validate_reference(&self, reference: &TemplateRef) -> Result<(), NativeError> {
+        self.validate(reference).map(|_| ())
+    }
+}
+
 fn error(kind: NativeErrorKind) -> NativeError {
     NativeError {
         phase: Phase::Template,

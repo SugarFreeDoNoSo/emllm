@@ -493,3 +493,33 @@ cargo test --release
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
+
+## Tensores estructurales (4.1)
+
+`native::tensor::{Shape, Tensor, TensorView}` describe referencias contiguas
+row-major, hasta cuatro ejes. `Shape` comprueba rank, ejes no vacíos, producto y
+coordenadas; la forma escalar tiene un elemento. Las vistas y reshape conservan
+orden y número de elementos sin evaluar ni copiar valores. El constructor de
+tensores comprueba longitud; cada operación comprueba además la procedencia de
+todos sus operandos, incluso una reducción de longitud uno.
+
+`TemplateBuilder` y `CompositionBuilder` comparten `base_tensor`, `dot`,
+`balanced_sum`, `project` y `residual`. `base_tensor` conserva raíces y alias de
+la base. Proyección usa entrada `[T,in]`, pesos `[out,in]` y salida `[T,out]`;
+recorre posición, canal de salida y canal de entrada en ese orden. El dot emite
+productos con `model::mul`, después suma pares adyacentes con `model::add`:
+`[a,b,c,d,e] → [a+b,c+d,e] → [(a+b)+(c+d),e] → resultado`. El impar se traslada,
+sin relleno y sin cambiar la orientación de los operandos. Residual suma
+coordenadas correspondientes de formas iguales.
+
+Los buffers de handles usan reservas recuperables y el presupuesto `roots`;
+las instrucciones/nodos siguen sujetos a sus presupuestos propios. La reducción
+compacta in-place su buffer temporal. `Tensor::storage_bytes` informa payload y
+capacidad de handles, separados de los pares One/Magma que referencian.
+
+Tres pruebas cubren overflow/indexación/reshape, cancelación y longitud impar,
+proyección `[[1,2],[3,4]]*[5,6]=[17,39]`, residuales, alias embedding/salida,
+puertos, referencias ajenas y formas incompatibles. La ruta de plantilla se
+instancia con embeddings y se lee externamente; el fixture cerrado se compone
+con el evaluador prohibido. Ambos se contrastan con oráculos independientes y
+los dos lectores. Pasan 31 pruebas de biblioteca, Clippy y formato.

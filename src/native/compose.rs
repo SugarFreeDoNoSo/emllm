@@ -288,6 +288,24 @@ impl Builder for CompositionBuilder {
     }
 }
 
+impl super::tensor::TensorBuilder for CompositionBuilder {
+    fn phase(&self) -> Phase {
+        Phase::Compose
+    }
+    fn limits(&self) -> NativeLimits {
+        self.limits
+    }
+    fn base(&self) -> &Arc<PreparedBase> {
+        self.source.base()
+    }
+    fn import_base(&self, reference: &BaseRef) -> Result<NativeRef, NativeError> {
+        self.base_reference(reference)
+    }
+    fn validate_reference(&self, reference: &NativeRef) -> Result<(), NativeError> {
+        validate(&self.identity, self.node_count(), reference).map(|_| ())
+    }
+}
+
 fn error(kind: NativeErrorKind) -> NativeError {
     NativeError {
         phase: Phase::Compose,

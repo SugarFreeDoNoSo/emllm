@@ -147,6 +147,9 @@ impl PreparedBase {
         for id in 0..vocab {
             vocabulary.push(builder.register(vocabulary_bits(id as u32)).unwrap());
         }
+        for bits in EXPANSION_BITS {
+            builder.register(F32Bits::new(bits).unwrap()).unwrap();
+        }
         let entries: Vec<_> = (0..vocab * channels)
             .map(|i| builder.register(vocabulary_bits((i % 3) as u32)).unwrap())
             .collect();

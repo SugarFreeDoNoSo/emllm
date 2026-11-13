@@ -74,6 +74,7 @@ impl Resource {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativeErrorKind {
+    Tensor(super::tensor::TensorError),
     ForeignReference,
     InvalidReference {
         index: usize,
@@ -153,6 +154,7 @@ impl fmt::Display for NativeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: ", self.phase.as_str())?;
         match &self.kind {
+            NativeErrorKind::Tensor(error) => write!(f, "{error}"),
             NativeErrorKind::ForeignReference => {
                 write!(f, "reference belongs to another native context")
             }

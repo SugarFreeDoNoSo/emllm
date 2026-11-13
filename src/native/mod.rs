@@ -8,6 +8,7 @@ mod instantiate;
 mod limits;
 mod prepared;
 mod template;
+pub mod tensor;
 
 pub use codec::{NativePrefix, NativeSymbol};
 pub use compose::{CompositionBuilder, NativeOutput, NativeRef, OutputStorage};
