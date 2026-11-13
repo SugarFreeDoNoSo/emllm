@@ -173,3 +173,105 @@ a revisar las expansiones o la decisión numérica. No se añaden primitivas,
 clamps ni sustituciones para conseguir que una prueba pase. Los números
 anteriores son observaciones locales reproducibles mediante el comando, no
 cotas globales de error, tiempo o memoria.
+
+## Puerta de viabilidad de stories260K: identidades candidatas (4.1)
+
+Esta sección conserva `M(x,y)=exp(x)-ln(y)`. Los metadatos IEEE usan potencias
+de dos, pero no añaden `exp2`, `log2` ni hojas numéricas al lenguaje.
+
+### Decodificación diádica de F32
+
+Para bits de signo s, exponente almacenado b y fracción f (23 bits):
+
+- b=255 se rechaza antes de construir: NaN/infinito.
+- b=0: magnitud `f * 2^-149`, incluidos los dos ceros si f=0.
+- 1<=b<=254: magnitud `(2^23+f) * 2^(b-150)`.
+- El signo es `(-1)^s`. Desplazar los ceros finales de la mantisa y aumentar
+  el exponente conserva exactamente el racional diádico y acorta el trabajo.
+
+El signo de cero permanece en los metadatos importados; ambos ceros construyen
+la expresión z. No se promete que la cancelación del DAG preserve un cero IEEE
+negativo: la tolerancia de síntesis compara valores, no bits de la evaluación.
+
+### Mantisa fraccionaria y escala positiva
+
+Sea `l=L(A(1,1))=ln(2)` y `h=E(N(l))=1/2`. Definimos, para x>0:
+
+```text
+H(x) = E(A(N(l), L(x))) = x/2
+D(x) = E(A(l, L(x)))    = 2*x
+```
+
+La orientación de A es deliberada: su primer operando es siempre ±ln(2),
+no `ln(x)`. Así su residuo P es fijo y pequeño; invertir los argumentos podría
+volver a introducir `exp(exp(ln(x)))`. Los dominios reales son x>0 y las
+exponenciales adicionales positivas. No se evalúa x para escoger orientación.
+
+Para mantisa entera no nula m con k bits, se construye `m/2^k` recorriendo los
+bits de menor a mayor: empezar en h en el primer bit 1; para cada bit siguiente,
+aplicar H a x si es 0 y a `A(1,x)` si es 1. Por inducción el acumulador es la
+fracción binaria de los bits ya leídos, estrictamente entre 0 y 1; al finalizar
+está en `[1/2,1)`. Una mantisa de 24 bits no necesita un entero de magnitud 2^24.
+Para `m*2^e`, aplicar D `e+k` veces si es positivo, o H `-(e+k)` veces si es
+negativo. El signo final se aplica con N, y cero con z.
+
+La metadata controla únicamente un número finito de expansiones y bits de
+mantisa. Todos los logaritmos de H/D reciben expresiones positivas en reales;
+las sumas de mantisa tienen primer operando One. La negativización final N
+todavía usa exponenciales de la magnitud: no se afirma soporte numérico de todos
+los F32 negativos. La implementación debe verificar **cada** escalar del corpus,
+incluidos sus extremos documentados, y detenerse ante cualquier fallo requerido.
+
+### Operaciones candidatas del modelo
+
+Se mantienen como candidatos iniciales A, N, S y F de las derivaciones anteriores.
+Para las operaciones restantes:
+
+| Operación | Expansión | Dominio real adicional |
+| --- | --- | --- |
+| Exponencial | `E(x)` | ninguno |
+| Recíproco | `R(x)=E(N(L(x)))` | x>0 |
+| Raíz inversa | `U(x)=E(F(-1/2,L(x)))` | x>0 |
+| SiLU | `F(x,R(A(1,E(N(x)))))` | denominador `1+exp(-x)>0` |
+| Producto escalar | suma de `F(xi,yi)` | ninguno |
+| RMSNorm | `F(F(xi,U(A(mean(F(xj,xj)),eps))),wi)` | eps>0 |
+
+`-1/2`, epsilon, escala de atención y coeficientes RoPE deben ser expresiones
+sintetizadas. Dividir por una longitud usa su recíproco positivo sintetizado;
+la metadata de forma determina las iteraciones, nunca una operación numérica
+del evaluador. Las sumas/reducciones agrupan pares adyacentes en árbol; una cola
+impar pasa al nivel siguiente. Este es el orden del oráculo del corpus, distinto
+del orden interno que el backend matricial de PyTorch pueda elegir.
+
+Softmax para la fila causal t construye únicamente scores `s0..st`, elige
+el **primer score simbólico** p=s0 y forma `ei=E(S(si,p))`; las probabilidades
+son `F(ei,R(sum(e)))`. Restar un mismo pivote se cancela en numerador/denominador
+sobre los reales. La suma es positiva en reales; no requiere comparación nativa,
+máximo de referencia ni máscara infinita. No controla el rango de `si-p` como
+lo haría un pivote máximo. Su finitud y error deben demostrarse con el corpus.
+
+Estos dominios son algebraicos. A y F pueden desbordar, sufrir cancelación o
+cambiar el signo calculado de un argumento positivo. R/U/SiLU heredan esos
+riesgos. La puerta 4.2–4.4 exige los thresholds fijados, pureza y presupuestos;
+disponer de estas identidades no la da por superada ni permite alimentar el DAG
+con activaciones de referencia.
+
+### Contraejemplo ejecutado: A(7,0)
+
+```sh
+cargo run --release --example synthesis_probe -- --dump
+```
+
+El ejemplo construye 7 desde One mediante seis `A(One,acumulador)` y construye z;
+compila todos los programas antes de evaluar. Sus entradas evaluadas son `[7,0]`.
+El programa de `A(7,z)` contiene V/E/R/D=`40/78/1/37`; el plan necesita cuatro
+posiciones. Ambos evaluadores fallan con `ExponentialOverflow`, nodo lógico
+**38**, `Magma(37,0)`, antes de entregar la raíz 39.
+
+El nodo 37 representa `P(7)-0 = exp(7)-7 ≈1089.633158428459`, por lo que el
+nodo 38 intenta su exponencial; el límite finito de exponente F64 es
+aproximadamente 709.7827. `--dump` publica todos los nodos/pares para inspección.
+Es evidencia nativa con Rust 1.92.0, `aarch64-apple-darwin`, release, y demuestra
+el fallo del constructor histórico aun cuando el resultado real final sea 7.
+No demuestra imposibilidad de otra expansión One/Magma: obliga a comprobar
+las candidatas nuevas antes de ensamblar el modelo.
