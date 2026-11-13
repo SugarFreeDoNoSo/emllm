@@ -107,3 +107,50 @@ Tolerancias conservadas por elemento:
 Se mantienen también las tolerancias originales del núcleo (1e-9, 1e-8, 1e-6).
 Valores no finitos o un logit fuera de tolerancia invalidan el caso aunque top-1
 coincida. Estas comprobaciones de referencias no son resultados de inferencia EML.
+
+## Presupuestos nativos (1.2)
+
+`native::NativeLimits` define límites inclusivos configurables; `Phase` y
+`Resource` identifican inequívocamente dónde y qué se cuenta. `NativeError`
+distingue `Limit { requested, limit }`, `SizeOverflow` y `Allocation`.
+Sumas de contadores, productos de formas y bytes del payload se comprueban antes
+de reservar; `reserve` usa `Vec::try_reserve` y conserva longitud/contenido al
+fallar. Los límites cuentan elementos lógicos, no capacidad reservada. La
+capacidad especulativa y costes del asignador deben contabilizarse aparte.
+
+El perfil inicial versionado es [`tools/native-profile.json`](../tools/native-profile.json).
+`native_profile.load_profile(path)` permite seleccionar otro archivo completo
+antes de una corrida y rechaza campos desconocidos, ausentes, booleanos, negativos,
+overflow y valores no finitos. La prueba Python compara sus límites estructurales
+con el ejemplo Rust `native_profile`, evitando divergencias de defaults.
+
+| Recurso | Límite inicial | Unidad/alcance |
+| --- | ---: | --- |
+| `package_bytes` / `tensors` | 2097152 / 64 | Bytes de entrada / entradas del directorio |
+| `base_nodes` | 50000000 | Nodos residentes de constantes, incluido One |
+| `template_instructions` | 250000000 | Aplicaciones de plantilla, sin contar base ni puertos |
+| `ports` | 1024 | Parámetros formales (16 × 64) |
+| `roots` | 1000000 | Posiciones de raíces, incluidas repetidas/diagnósticas |
+| `closed_nodes` | 300000000 | Base residente completa + delta de solicitud |
+| `reachable_nodes` | 300000000 | Clausura compilada/evaluada externamente |
+| `numeric_slots` | 300000000 | Posiciones del plan de evaluación |
+| `max_rss_bytes` | 17179869184 | 16 GiB, supervisión externa del proceso |
+| `phase_timeout_seconds` | 1800 | Tiempo supervisado por fase |
+
+Cero es válido para presupuestos estructurales: admite una colección vacía y
+rechaza su primer elemento. No concede un grafo válido sin One/raíces; esos son
+contratos de los constructores. RSS y timeout deben ser positivos y finitos.
+Los límites estructurales no limitan bytes del proceso ni tiempo; los dos últimos
+pertenecen al supervisor externo de 1.3. Ningún perfil cambia durante una corrida
+ni altera los presupuestos históricos del experimento anterior.
+
+Verificación: cuatro pruebas Rust (categorías de reserva, límites cero/exactos/
+excedidos, base+delta, overflow, conservación de vectores), tres pruebas Python
+de perfil y Clippy con advertencias como errores.
+
+```sh
+cargo test --release --lib native::limits
+cargo test --release --test native_limits
+target/tiny-model/venv/bin/python -B -m unittest discover -s tools/tests -p test_native_profile.py -v
+cargo run --quiet --release --example native_profile
+```
