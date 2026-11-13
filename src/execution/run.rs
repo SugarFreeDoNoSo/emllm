@@ -1,4 +1,4 @@
-use crate::eval::{EvalError, EvalErrorKind, magma_value};
+use crate::eval::{EvalError, EvalErrorKind, EvaluationStorage, magma_value};
 
 use super::ExecutionPlan;
 
@@ -25,6 +25,15 @@ use super::ExecutionPlan;
 /// assert!((result[0] - (std::f64::consts::E.exp() - 1.0)).abs() <= 1e-12);
 /// ```
 pub fn run(plan: &ExecutionPlan<'_>, max_nodes: usize) -> Result<Vec<f64>, EvalError> {
+    run_with_storage(plan, max_nodes).map(|(outputs, _)| outputs)
+}
+
+/// Mismo recorrido que [`run`], con capacidades reales de valores y salidas.
+/// Los contadores son diagnósticos de almacenamiento, no una medida de RSS.
+pub fn run_with_storage(
+    plan: &ExecutionPlan<'_>,
+    max_nodes: usize,
+) -> Result<(Vec<f64>, EvaluationStorage), EvalError> {
     if plan.program.node_count() > max_nodes {
         return Err(EvalError {
             kind: EvalErrorKind::NodeLimit { limit: max_nodes },
@@ -38,5 +47,7 @@ pub fn run(plan: &ExecutionPlan<'_>, max_nodes: usize) -> Result<Vec<f64>, EvalE
         let right = values[instruction.right];
         values[instruction.destination] = magma_value(left, right, index + 1)?;
     }
-    Ok(plan.root_slots.iter().map(|&slot| values[slot]).collect())
+    let outputs = plan.root_slots.iter().map(|&slot| values[slot]).collect();
+    let storage = EvaluationStorage::capture(&values, &outputs);
+    Ok((outputs, storage))
 }

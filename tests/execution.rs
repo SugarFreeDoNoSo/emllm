@@ -344,3 +344,33 @@ fn deterministic_shared_dags_preserve_logical_identities_and_first_errors() {
         assert_eq!(snapshot(&program), before);
     }
 }
+
+#[test]
+fn storage_counters_measure_actual_vectors_and_preserve_results() {
+    use emllm::{eval::evaluate_with_storage, execution::run_with_storage};
+    let mut arena = Arena::new(101);
+    let one = arena.one().unwrap();
+    let mut root = one.clone();
+    for _ in 0..100 {
+        root = arena.magma(&one, &root).unwrap();
+    }
+    let program = compile(&arena, &[root.clone(), one, root], 101).unwrap();
+    let s = program.storage();
+    assert_eq!(s.pair_payload_bytes, std::mem::size_of_val(program.pairs()));
+    assert_eq!(s.root_payload_bytes, std::mem::size_of_val(program.roots()));
+    assert_eq!(s.metadata_bytes, std::mem::size_of::<Program>());
+    assert!(s.pair_capacity_bytes >= s.pair_payload_bytes);
+    assert!(s.root_capacity_bytes >= s.root_payload_bytes);
+    let p = plan(&program, LIMITS).unwrap();
+    let (original, old) = evaluate_with_storage(&program, 101).unwrap();
+    let (planned, new) = run_with_storage(&p, 101).unwrap();
+    assert_close(&planned, &original);
+    assert_eq!((old.values, new.values), (101, 2));
+    for stats in [old, new] {
+        assert_eq!(stats.value_payload_bytes, stats.values * 8);
+        assert_eq!(stats.output_payload_bytes, 3 * 8);
+        assert!(stats.value_capacity_bytes >= stats.value_payload_bytes);
+        assert!(stats.output_capacity_bytes >= stats.output_payload_bytes);
+    }
+    assert_eq!(program.storage(), s);
+}

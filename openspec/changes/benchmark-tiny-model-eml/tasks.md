@@ -17,7 +17,7 @@
 - [x] 3.1 Añadir `execution/plan.rs` y su API privada/validada de instrucciones, plan prestado del programa, límites y estadísticas; implementar último uso, raíces vivas, One reservado y asignación determinista sin evaluar nodos. Verificar One, límites cero/exactos, mapa de raíces, plan de un programa numéricamente inválido y doctests que impidan fabricar o mutar planes.
 - [x] 3.2 Añadir `execution/run.rs` y compartir internamente el kernel de `eval.rs`, preservando la API del evaluador original. Verificar lecturas de ambos operandos antes de escribir, raíces repetidas, comparación diferencial, presupuesto lógico antes de ejecutar y categorías/nodos de errores de dominio y desbordamiento; documentar firmas, ownership y semántica.
 - [x] 3.3 Completar pruebas de liveness con operandos iguales, raíz intermedia, diamante, último uso simultáneo, fallos tras reutilización, reintentos y ejecuciones intercaladas. Verificar preservación de nodos/pares/raíces/estadísticas y la cadena estable de 10000 pasos con como máximo dos posiciones y error diferencial dentro de `1e-12 + 1e-12*abs(ref)`.
-- [ ] 3.4 Publicar estadísticas y una comparación reproducible del plan frente al evaluador original sobre la cadena y las tres redes existentes; verificar tamaños reales de instrucciones, programa, raíces, valores y capacidades sin atribuir payload a RSS. Actualizar `docs/architecture.md` y `docs/complexity.md` con API, límites y evidencia del ahorro de posiciones, incluyendo cualquier aumento del almacenamiento total.
+- [x] 3.4 Publicar estadísticas y una comparación reproducible del plan frente al evaluador original sobre la cadena y las tres redes existentes; verificar tamaños reales de instrucciones, programa, raíces, valores y capacidades sin atribuir payload a RSS. Actualizar `docs/architecture.md` y `docs/complexity.md` con API, límites y evidencia del ahorro de posiciones, incluyendo cualquier aumento del almacenamiento total.
 
 ## 4. Sintesis ampliada y puerta de viabilidad
 
@@ -120,3 +120,9 @@
 
 - Nueve pruebas específicas satisfactorias; añadidos diamante/último uso simultáneo, raíces intermedias, errores intercalados/reintentos y 32 DAGs compartidos deterministas. Un oráculo de identidades lógicas comprueba las lecturas independientemente de los valores numéricos.
 - Cadena estable de 10000 pasos: 10001 nodos, dos posiciones (16 bytes), equivalencia bajo `1e-12 + 1e-12*abs(ref)`, rechazo con una posición. Nodos, pares, raíces y estadísticas permanecen intactos; Clippy sin advertencias.
+
+## Evidencia de almacenamiento (3.4)
+
+- `Program::storage` y variantes `evaluate_with_storage`/`run_with_storage` publican tamaños y capacidades reales. `examples/plan_memory.rs` compara cadena y tres redes, con todas las salidas verificadas.
+- Posiciones planificadas: 2/24/25/25 frente a 10001/614/676/676. Las instrucciones de 24 bytes aumentan el total contabilizado: por ejemplo, capacidad+metadata de cadena 342304 → 502384 bytes. RSS no medido; alcance y tablas completos en `docs/complexity.md` y API en `docs/architecture.md`.
+- Captura repetida con cifras idénticas y error diferencial cero en `target/analysis/execution-plan-memory/`. Suite release: 52 pruebas y 20 doctests; Clippy satisfactorio.

@@ -142,6 +142,64 @@ y evaluación y sobrecostes del asignador. No son RSS ni heap total del proceso.
 La reducción de este payload no mide velocidad ni precisión: esta última se
 verifica por separado frente a referencias y tolerancias, manteniendo `f64`.
 
+## Plan de temporales y almacenamiento total
+
+```sh
+cargo run --release --example plan_memory
+cargo test --release --test execution
+```
+
+Medición de la tarea 3.4 de `benchmark-tiny-model-eml`, Rust 1.92.0,
+`aarch64-apple-darwin`. Dos ejecuciones conservaron las mismas cifras y error
+diferencial cero en estos cuatro casos (criterio `1e-12 + 1e-12*abs(ref)`). Las
+tres redes también pasan su criterio original de `1e-6`.
+
+| Caso | V | Posiciones originales / plan | Bytes de valores originales / plan | Instrucciones del plan, bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Cadena 10000 | 10001 | 10001 / 2 | 80008 / 16 | 240000 |
+| Red `[0,0]` | 614 | 614 / 24 | 4912 / 192 | 14712 |
+| Red `[1/2,-1/2]` | 676 | 676 / 25 | 5408 / 200 | 16200 |
+| Red `[-1/2,1/2]` | 676 | 676 / 25 | 5408 / 200 | 16200 |
+
+Los tamaños reales son: índice 8, par 16, instrucción 24, `f64` 8,
+`Program` inline 88 y `ExecutionPlan` inline 64 bytes. Las dos cabeceras de los
+buffers de valores/salidas suman 48 bytes. Las raíces del programa, mapa de
+raíces del plan y salida ocupan 8 bytes cada uno en estos casos; sus vectores
+tienen exactamente esa capacidad. Los vectores del plan y de evaluación también
+tienen capacidad igual a su longitud en esta medición. En cambio, los pares
+de la cadena ocupan 160000 bytes con capacidad de 262144; los de las redes
+ocupan 9808/10800/10800 con capacidad de 16384 cada uno.
+
+| Caso | Original: payload + metadata | Plan: payload + metadata | Original: capacidad + metadata | Plan: capacidad + metadata |
+| --- | ---: | ---: | ---: | ---: |
+| Cadena 10000 | 240160 | 400240 | 342304 | 502384 |
+| Red `[0,0]` | 14872 | 24936 | 21448 | 31512 |
+| Red `[1/2,-1/2]` | 16360 | 27424 | 21944 | 33008 |
+| Red `[-1/2,1/2]` | 16360 | 27424 | 21944 | 33008 |
+
+Son sumas de estructuras por modo: **programa residente + plan opcional + buffer
+numérico + salidas**, con metadatos inline y sin contar dos veces cabeceras.
+Capacidad ya incluye payload; no se suman ambas columnas. El ejemplo recoge
+ambos modos en un proceso, pero estas sumas no representan su heap completo.
+Excluyen arena/internado, temporales de construcción/compilación/planificación,
+sobrecoste del asignador, registros diagnósticos y otros locales. **RSS no medido**;
+no se deduce a partir de estos payloads. Tampoco se mide aceleración aquí.
+
+La reducción del buffer queda demostrada, pero el almacenamiento contabilizado
+total **aumenta** en los cuatro casos por las instrucciones adicionales. El plan
+presta el programa y evita duplicar sus pares, pero no elimina su residencia.
+Últimos usos, posiciones y lista libre usan espacio temporal O(V) al planificar;
+la ejecución usa O(S+R) valores/salidas para S posiciones. Ambos recorridos siguen
+siendo O(V+E+R), con una llamada al mismo kernel por fila.
+
+Límites de la comparación: construcción/compilación de cadena 10001; redes
+100000; planificación 100000 nodos/posiciones y evaluación 100000. La prueba
+decisiva de cadena usa además límite exacto de dos posiciones y rechaza una.
+`Program::storage`, `ExecutionPlan::stats` y las variantes `*_with_storage`
+publican las capacidades consultadas en los vectores reales. Diez pruebas de
+ejecución y la suite completa de 52 pruebas/20 doctests pasan. Captura local con
+comando, revisión, hashes de fuentes y salida: `target/analysis/execution-plan-memory/`.
+
 ## Analizador externo y procedencia
 
 Se seleccionó `rust-code-analysis-cli` del repositorio

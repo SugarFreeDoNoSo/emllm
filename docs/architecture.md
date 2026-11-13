@@ -10,7 +10,8 @@ algebraicas y sus condiciones están en [síntesis](synthesis.md).
 ```text
 Rational / Network221 → Arena + NodeId → compile → Program
                                            │        ├→ inspección
-                                           │        └→ evaluate + presupuesto
+                                           │        ├→ evaluate + presupuesto
+                                           │        └→ plan → ExecutionPlan → run
                                            └→ CompileError
 ```
 
@@ -108,6 +109,47 @@ archivo ni ruta pública para importar una tabla sin validar. El
 `V * size_of::<Node>()` del modelo etiquetado. Excluye capacidad sobrante,
 metadatos, raíces, internado y temporales. Reducir esos elementos no demuestra
 menos memoria total, aceleración ni mayor precisión de `f64`.
+
+### Plan de ejecución prestado
+
+`execution::plan(&Program, PlanLimits { max_nodes, max_slots })` produce un
+`ExecutionPlan<'program>` de campos privados. Presta el programa inmutable; no
+puede sobrevivirle ni construirse públicamente desde instrucciones arbitrarias.
+Planificar no evalúa exp/ln: también acepta grafos cuyo posterior cálculo falla.
+
+El plan conserva una instrucción `[izquierda,derecha,destino]` por fila, en el
+mismo orden. Esos tres índices son **posiciones numéricas**, distintas de los
+índices lógicos de `Program`. La instrucción i corresponde al nodo lógico i+1;
+`program()` recupera el snapshot para resolver sus diagnósticos. `instructions()`
+devuelve copias, `root_slots()` una vista inmutable con orden y duplicados, y
+`stats()` contadores sin recorrido ni evaluación.
+
+La planificación calcula últimos usos y marca raíces vivas hasta la recogida.
+One ocupa siempre la posición 0. Al emitir una instrucción resuelve ambos
+operandos, libera cada último uso una sola vez y reutiliza la última posición
+liberada disponible. No reordena operaciones. Descarta sus vectores de últimos
+usos, localizaciones y posiciones libres al terminar.
+
+`execution::run(&ExecutionPlan, max_nodes)` crea su propio buffer y carga ambos
+operandos antes de escribir. Comparte el kernel comprobado de `eval.rs`, sin
+duplicar las reglas de finitud, dominio y overflow. No guarda valores entre
+llamadas. Ambos evaluadores devuelven `Vec<f64>` completo o el mismo `EvalError`.
+Los límites de planificación distinguen `NodeLimit`, `SlotLimit` y `Allocation`;
+la ejecución sigue contando nodos lógicos, aunque haya solo dos posiciones.
+Los rechazos de presupuesto no inventan un nodo numéricamente fallido.
+
+`Program::storage()` informa payload/capacidad de pares y raíces y el tamaño
+inline del snapshot. `PlanStats` añade instrucciones, mapa de raíces y tamaño
+del plan, y declara el buffer requerido. `eval::evaluate_with_storage` y
+`execution::run_with_storage` devuelven `(salidas, EvaluationStorage)` con las
+capacidades reales de valores y resultados antes de liberar los temporales.
+Las APIs originales delegan en esos mismos recorridos y conservan sus firmas.
+
+La evidencia y el alcance de esta contabilidad están en
+[comparación de temporales](complexity.md#plan-de-temporales-y-almacenamiento-total).
+Las pruebas de `tests/execution.rs` incluyen identidades lógicas de valores vivos,
+diamantes, raíces intermedias, errores/reintentos y una cadena de 10000 pasos;
+los doctests comprueban privacidad, inmutabilidad y vida del préstamo.
 
 ### Migración de firmas
 

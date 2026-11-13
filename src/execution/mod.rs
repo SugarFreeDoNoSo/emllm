@@ -6,4 +6,4 @@ mod plan;
 mod run;
 
 pub use plan::{ExecutionPlan, PlanError, PlanLimits, PlanStats, plan};
-pub use run::run;
+pub use run::{run, run_with_storage};
