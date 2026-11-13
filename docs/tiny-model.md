@@ -240,3 +240,138 @@ evidencia en `target/analysis/operation-synthesis-revised/report.json`.
 Se conserva el fallo histórico en `target/analysis/operation-synthesis/`.
 Las reducciones y componentes completos tienen su propia puerta 4.4; todavía
 no hay ejecución del Transformer en EML ni comparación completa de motores.
+
+## Puerta de composiciones: bloqueo en 4.4
+
+```sh
+target/tiny-model/venv/bin/python -B tools/verify_component_corpus.py
+# Reproducción del caso completo fallido, sin checkpoint ni Python:
+cargo run --release --example verify_components -- tests/fixtures/tiny-softmax-blocker.txt
+# Verificaciones locales del constructor de la puerta y su protocolo:
+cargo test --release --example verify_components
+```
+
+Los dos primeros comandos terminan con código **1**, con el mismo error.
+Las dos pruebas locales pasan; su alcance no sustituye la puerta del corpus.
+
+### Datos, construcción y cobertura
+
+El verificador comprueba primero los hashes y procedencia de las referencias.
+Conserva las 631 reducciones y los 208 componentes del corpus original y añade
+62 filas completas SwiGLU de longitud 172: se seleccionan las filas indicadas
+por los productos `.gated` del corpus y se recuperan sus `gate`/`up` de las
+trazas F32 fijadas. El oráculo calcula `SiLU(gate)*up` en F64. No se modifican
+el corpus, los prefijos, el pivote ni las tolerancias.
+
+Los 901 casos se persisten **antes** de ejecutar EML. Hash de `cases.json`:
+`bb8cae6be992a3386cb9efb2c8665efdb840bd89a24291a84a96be795ad835d1`.
+Hash del protocolo `components.txt`:
+`c400673edf1fd295436800d75eab48b88ef0e6e8d660045190f41ef51d8a41b6`.
+`EMLCOMP1` contiene un contador y cuatro líneas por caso: operación/longitud/
+auxiliar, bits de entrada izquierda, bits derechos (o `-`) y oráculo F64.
+El auxiliar es epsilon F32 para RMSNorm, pivote 0 para softmax y `-` en los
+otros casos. Rust valida formas/finitud y separa los oráculos del tipo que
+recibe el constructor.
+
+Cada caso construye un único DAG, con escalares compartidos por bits dentro
+de su arena. Las reducciones son árboles de pares adyacentes, con cola impar
+conservada. RMSNorm compone cuadrados, suma, multiplicación por 1/64, epsilon,
+raíz inversa y dos productos por coordenada. Softmax usa el primer score
+simbólico y suma las exponenciales antes del recíproco. SwiGLU compone SiLU y
+producto con `up`; su proyección de salida está representada por las
+reducciones de longitud 172. No se evalúa ni se reinyecta un intermedio.
+
+| Familia | Requeridos | Verificados | Fallidos | No verificados |
+| --- | ---: | ---: | ---: | ---: |
+| Producto escalar longitud 8 | 70 | 70 | 0 | 0 |
+| Producto escalar longitud 64 | 490 | 490 | 0 | 0 |
+| Producto escalar longitud 172 | 71 | 71 | 0 | 0 |
+| RMSNorm | 48 | 6 | 0 | 42 |
+| Softmax | 160 | 11 | 1 | 148 |
+| SwiGLU | 62 | 0 | 0 | 62 |
+| **Total** | **901** | **648** | **1** | **252** |
+
+Los casos satisfactorios cumplen `1e-6 + 1e-5*abs(ref)` con máxima fracción
+del umbral `0.00419606113722238`; diferencia entre evaluadores cero. La puerta
+se detiene al primer fallo. Límites por caso: 1000000 nodos en construcción,
+compilación, planificación y evaluación; 100000 posiciones; carga de 8 MiB,
+10000 casos y longitud máxima 512. Los límites de operaciones aisladas de 4.3
+son independientes.
+
+### Caso reproducible y causa
+
+Índice global **648**, `prefix8/explicit_f32/layers.0.softmax[5,7]`: cabeza 5,
+posición 7, ocho scores de `layers.0.scores[208..216]`. Bits en orden:
+
+```text
+c0350c6c c0242783 3fbe0c87 3f29cb4b 3db56d0c 40a89ad4 40111de1 3fb0c4b0
+```
+
+El primer score es `-2.828883171081543`; el sexto es `5.268899917602539`.
+Con el pivote fijado, el sexto término tiene exponente `8.097783088684082` y
+valor F64 de referencia **3287.1726214028567**. Ese valor es finito, pero
+`A_m(x,y)` construye `E(y)` para formar `128-y`: al sumar el quinto y sexto
+término vuelve a exponenciar una magnitud superior a 709.7827.
+
+Ambos evaluadores devuelven **ExponentialOverflow**, nodo lógico **1596**,
+`Magma(1595,0)`, sin probabilidades parciales. El programa tiene
+**V/E/R/D=3657/7312/8/484**, 26 posiciones y no agota los presupuestos.
+Las ocho probabilidades de referencia son finitas (máxima ≈0.90150723).
+No se sustituye el pivote por un máximo de referencia ni se segmenta el DAG.
+
+### Coste estructural y memoria medidos
+
+Máximos por familia; las columnas pueden proceder de casos distintos:
+
+| Familia | V | E | R | D | Posiciones |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dot 8 | 5672 | 11342 | 1 | 517 | 29 |
+| Dot 64 | 41008 | 82014 | 1 | 595 | 96 |
+| Dot 172 | 107448 | 214894 | 1 | 637 | 182 |
+| Todos los programas preparados, incluido el fallido | 107448 | 214894 | 64 | 1115 | 336 |
+
+Capacidad más metadata máximas de un caso satisfactorio: **2956888 bytes**
+en modo original y **4677400 bytes** en modo planificado. Incluyen programa,
+raíces, buffer numérico, salidas y, cuando corresponde, instrucciones y mapa
+de raíces del plan. En el caso fallido, el programa residente ocupa 65688
+bytes y programa+plan 153560; buffers requeridos de 29256 y 208 bytes,
+respectivamente. Las capacidades reales de los buffers de la corrida fallida
+se declaran no disponibles. Los registros desglosan payload, capacidad y
+metadata; no incluyen asignador ni temporales de construcción/compilación/
+planificación en esos totales.
+
+RSS máximo medido con `/usr/bin/time -l` en macOS: **31358976 bytes**. Incluye
+el proceso Rust completo, carga y todas las fases de los casos hasta el fallo;
+excluye Python y compilación Rust. No es un pico exclusivo de evaluación ni
+se atribuye a un solo caso. Los tiempos por fase y las estadísticas de cada
+programa están en `target/analysis/component-synthesis/stdout.jsonl`; procedencia,
+hashes, comando, revisión, toolchain y resumen en `report.json` del mismo directorio.
+
+### Estimación de crecimiento y presupuesto del siguiente hito
+
+Presupuestos de decisión fijados para la expansión completa: **10000000 nodos**,
+**1000000 posiciones** y **2 GiB de proceso**. No se ha construido ni ejecutado
+ese programa. Las proyecciones lineales y las dos operaciones de atención
+(Q.K y suma ponderada) requieren 1868288 productos-acumulaciones para ocho
+tokens y 3744768 para dieciséis, incluyendo los cinco bloques y los 512 logits
+de la última posición.
+
+La mayor razón observada en los productos escalares cerrados es 709 nodos por
+término. Extrapolar esa razón da:
+
+| Prefijo | Nodos estimados para esos cálculos | Payload pares+instrucciones estimado |
+| --- | ---: | ---: |
+| 8 | 1324616192 | 52984647640 bytes |
+| 16 | 2655040512 | 106201620440 bytes |
+
+Son **estimaciones**, no grafos construidos, cotas formales ni RSS. Repiten el
+coste de constantes/operandos del caso aislado, que podría reducirse al compartir
+estructura; excluyen operaciones no lineales, arena/internado, asignador,
+capacidades sobrantes y temporales. Usan tamaños reales de 16 bytes por par y
+24 por instrucción. No estiman todavía las posiciones del modelo completo.
+Esta proyección queda por encima de los presupuestos y no acredita viabilidad
+de recursos; deberá refinarse antes de solicitar la expansión completa.
+
+**Estado: 4.4 pendiente y apply pausado en 13/29.** Hay que revisar la composición
+numérica de softmax y el coste por operación antes de continuar con tensores,
+Transformer o la aceptación completa entre motores.

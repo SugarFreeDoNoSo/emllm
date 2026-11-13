@@ -476,3 +476,8 @@ ahora pasa con V/E/R/D=601/1200/1/443 y 13 posiciones.
 Las 58 pruebas Rust y 20 doctests pasan; Clippy sin advertencias. Las tolerancias
 originales siguen vigentes. Pasar estas operaciones aisladas no demuestra las
 reducciones completas, RMSNorm, softmax ni SwiGLU: requieren la puerta 4.4.
+
+La primera ejecución de esa puerta verifica las 631 reducciones, pero falla
+en un softmax cuyo término exponencial alcanza ≈3287 y vuelve a entrar a E
+dentro de la suma desplazada. La reproducción, cobertura pendiente y costes
+están en [la puerta de composiciones](tiny-model.md#puerta-de-composiciones-bloqueo-en-44).
