@@ -154,3 +154,64 @@ cargo test --release --test native_limits
 target/tiny-model/venv/bin/python -B -m unittest discover -s tools/tests -p test_native_profile.py -v
 cargo run --quiet --release --example native_profile
 ```
+
+## Supervisor de fases y recursos (1.3)
+
+`tools/native_resources.py` ejecuta una lista de argumentos sin shell, en una
+sesión/grupo POSIX nuevo. El directorio de evidencia debe ser nuevo: contiene
+el perfil completo y su hash antes de lanzar, `stdout.log`, `stderr.log`, eventos
+incrementales `events.jsonl`, observaciones `rss.jsonl` y `report.json` final.
+Las escrituras incrementales se vacían para preservar la última fase incluso si
+la corrida termina inesperadamente. El supervisor no atribuye éxito numérico.
+
+El hijo emite líneas UTF-8 en stdout, haciendo flush, con este protocolo mínimo:
+
+```text
+EML_NATIVE_PHASE {"schema_version":1,"event":"start","phase":"base"}
+EML_NATIVE_PHASE {"schema_version":1,"event":"end","phase":"base"}
+```
+
+Fases: `load`, `base`, `template`, `encode`, `compose`, `compile`, `plan`,
+`evaluate-original`, `evaluate-planned`, `compare`, `select`, `emit`. Pueden
+repetirse secuencialmente; anidarlas, terminar otra fase, exceder 4096 bytes por
+evento o salir con una fase abierta invalida el protocolo. Un proceso sin eventos
+tampoco se declara verificado. `emit_phase` facilita la emisión en Python.
+Los marcadores se emiten fuera del cronómetro propio del hijo; los tiempos del
+supervisor son de recepción monotónica y no sustituyen la latencia nativa.
+
+En macOS/Linux, `ps -axo pid=,pgid=,rss=` observa la **suma de RSS del grupo**,
+convirtiendo KiB a bytes. Incluye hijos que permanezcan en ese grupo; puede contar
+páginas compartidas repetidamente. Excluye supervisor/sonda y procesos que salgan
+del grupo. Las corridas nativas ejecutarán el binario ya compilado. El intervalo
+nominal inicial es 0.1 s, más coste de sondeo/procesamiento; se registran los
+instantes reales. Es un watchdog observado, no una cota dura del sistema operativo:
+puede omitir picos breves y sobrepasar un límite entre muestras.
+
+`os.wait4` aporta además el máximo del comando según las reglas del SO
+(Darwin: bytes; Linux: KiB). Puede incorporar descendientes esperados según el SO;
+no es una suma simultánea ni un máximo exclusivo de composición. Ambos picos se
+contrastan con el perfil y conservan su alcance. Cada fase contiene también su
+máximo muestreado, o `null` si no tuvo observaciones; nunca se resta un máximo
+global de otro para inventar un pico por fase.
+
+El timeout se aplica a cada fase y a arranque/huecos sin fase. El exceso observado
+envía SIGTERM al grupo y SIGKILL tras 0.25 s si continúa. Un retorno no cero/señal,
+evento inválido, timeout o exceso de RSS produce `error`; la ausencia de métricas
+exigidas produce `unverified`, nunca RSS cero ni éxito acreditado. La salida CLI
+es no cero en ambos casos, conservando diagnóstico y última fase. En Darwin se
+contempla la carrera de señalización de un zombie, confirmando su salida con
+`wait4` antes de aceptar EPERM.
+
+Comprobaciones: nueve pruebas con procesos controlados, incluida terminación por
+RSS propio/de un hijo, timeout con SIGTERM ignorado, muerte inesperada, protocolo
+incorrecto y métricas ausentes. Ejemplo pequeño de la frontera de supervisión:
+
+```sh
+target/tiny-model/venv/bin/python -B -W error::ResourceWarning -m unittest discover -s tools/tests -p test_native_resources.py -v
+PYTHONPATH=tools target/tiny-model/venv/bin/python -B tools/native_resources.py \
+  --output-dir target/analysis/native-supervisor-smoke -- \
+  target/tiny-model/venv/bin/python -B -u -c 'from native_resources import emit_phase; import time; emit_phase("start", "base"); time.sleep(0.2); emit_phase("end", "base")'
+```
+
+El ejemplo usa una pausa controlada para verificar eventos y observación del
+proceso; no representa preparación ni rendimiento del modelo.
