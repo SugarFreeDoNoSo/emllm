@@ -5,8 +5,6 @@
 use crate::expr::{Arena, BuildError, NodeId};
 pub use crate::model_io::F32Bits;
 
-use super::{add, exp, logarithm, neg, zero};
-
 /// Racional diádico exacto: `(-1)^negative * mantissa * 2^exponent`.
 /// Metadatos enteros, no una instrucción. La mantisa no nula está normalizada a
 /// un entero impar; ambos ceros tienen mantisa/exponente cero y conservan signo.
@@ -40,14 +38,6 @@ pub fn decode(value: F32Bits) -> Dyadic {
     }
 }
 
-// H/D(x) = exp(A(±ln(2), ln(x))), x>0 en reales. El primer operando
-// de A permanece fijo; no se escoge una orientación evaluando x.
-fn scale_positive(arena: &mut Arena, log_scale: &NodeId, x: &NodeId) -> Result<NodeId, BuildError> {
-    let log_x = logarithm(arena, x)?;
-    let sum = add(arena, log_scale, &log_x)?;
-    exp(arena, &sum)
-}
-
 /// Expande bits finitos a un DAG cerrado. Solo las operaciones enteras de decode
 /// y los bits de mantisa deciden la construcción; no usa el valor F32/F64 ni un
 /// evaluador. Los errores de presupuesto son los de la arena y no entregan raíz.
@@ -56,35 +46,5 @@ fn scale_positive(arena: &mut Arena, log_scale: &NodeId, x: &NodeId) -> Result<N
 /// El algoritmo es candidato, no una promesa para todos los F32: por ejemplo,
 /// negativizar magnitudes muy grandes con N puede desbordar durante evaluación.
 pub fn synthesize(arena: &mut Arena, value: F32Bits) -> Result<NodeId, BuildError> {
-    let dyadic = decode(value);
-    if dyadic.mantissa == 0 {
-        return zero(arena);
-    }
-    let one = arena.one()?;
-    let two = add(arena, &one, &one)?;
-    let log_two = logarithm(arena, &two)?;
-    let negative_log_two = neg(arena, &log_two)?;
-    let mut magnitude = exp(arena, &negative_log_two)?;
-    let width = 32 - dyadic.mantissa.leading_zeros();
-    // La mantisa normalizada es impar: su primer bit 1 ya está en 1/2.
-    for bit in 1..width {
-        if dyadic.mantissa & (1 << bit) != 0 {
-            magnitude = add(arena, &one, &magnitude)?;
-        }
-        magnitude = scale_positive(arena, &negative_log_two, &magnitude)?;
-    }
-    let shift = dyadic.exponent + width as i32;
-    let log_scale = if shift < 0 {
-        &negative_log_two
-    } else {
-        &log_two
-    };
-    for _ in 0..shift.unsigned_abs() {
-        magnitude = scale_positive(arena, log_scale, &magnitude)?;
-    }
-    if dyadic.negative {
-        neg(arena, &magnitude)
-    } else {
-        Ok(magnitude)
-    }
+    super::structural::scalar::synthesize(arena, value)
 }

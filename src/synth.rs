@@ -11,6 +11,7 @@ use crate::expr::{Arena, BuildError, NodeId};
 
 pub mod model;
 pub mod scalar;
+pub(crate) mod structural;
 
 /// Racional normalizado de la frontera de construcción, no un nodo ejecutable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,97 +80,34 @@ impl Rational {
 
 /// E(x) = Magma(x, One).
 pub fn exp(arena: &mut Arena, x: &NodeId) -> Result<NodeId, BuildError> {
-    let one = arena.one()?;
-    arena.magma(x, &one)
+    structural::exp(arena, x)
 }
 
 /// z = Magma(One, exp(exp(One))); conserva la cancelación numérica.
 pub fn zero(arena: &mut Arena) -> Result<NodeId, BuildError> {
-    let one = arena.one()?;
-    let e = exp(arena, &one)?;
-    let ee = exp(arena, &e)?;
-    arena.magma(&one, &ee)
-}
-
-/// L(y), usado internamente solo con argumentos demostrados positivos.
-fn logarithm(arena: &mut Arena, y: &NodeId) -> Result<NodeId, BuildError> {
-    let z = zero(arena)?;
-    let reflected = arena.magma(&z, y)?;
-    let exponential = exp(arena, &reflected)?;
-    arena.magma(&z, &exponential)
-}
-
-/// P(x) = exp(x)-x >= 1 en aritmética real.
-fn positive_residue(arena: &mut Arena, x: &NodeId) -> Result<NodeId, BuildError> {
-    let exponential = exp(arena, x)?;
-    arena.magma(x, &exponential)
+    structural::zero(arena)
 }
 
 /// A(x,y) = exp(x) - (P(x)-y), sin restricción de signo en reales.
 pub fn add(arena: &mut Arena, x: &NodeId, y: &NodeId) -> Result<NodeId, BuildError> {
-    let residue = positive_residue(arena, x)?;
-    let log_residue = logarithm(arena, &residue)?;
-    let ey = exp(arena, y)?;
-    let difference = arena.magma(&log_residue, &ey)?;
-    let exponential = exp(arena, &difference)?;
-    arena.magma(x, &exponential)
+    structural::add(arena, x, y)
 }
 
 /// N(x) = 1-(1+x).
 pub fn neg(arena: &mut Arena, x: &NodeId) -> Result<NodeId, BuildError> {
-    let one = arena.one()?;
-    let incremented = add(arena, &one, x)?;
-    let exponential = exp(arena, &incremented)?;
-    let z = zero(arena)?;
-    arena.magma(&z, &exponential)
+    structural::neg(arena, x)
 }
 
 pub fn sub(arena: &mut Arena, x: &NodeId, y: &NodeId) -> Result<NodeId, BuildError> {
-    let negative = neg(arena, y)?;
-    add(arena, x, &negative)
-}
-
-fn positive_product(arena: &mut Arena, a: &NodeId, b: &NodeId) -> Result<NodeId, BuildError> {
-    let log_a = logarithm(arena, a)?;
-    let log_b = logarithm(arena, b)?;
-    let sum = add(arena, &log_a, &log_b)?;
-    exp(arena, &sum)
+    structural::sub(arena, x, y)
 }
 
 /// Producto por descomposición en diferencias de términos positivos.
 pub fn mul(arena: &mut Arena, x: &NodeId, y: &NodeId) -> Result<NodeId, BuildError> {
-    let ex = exp(arena, x)?;
-    let ey = exp(arena, y)?;
-    let px = positive_residue(arena, x)?;
-    let py = positive_residue(arena, y)?;
-    let u = positive_product(arena, &ex, &ey)?;
-    let v = positive_product(arena, &ex, &py)?;
-    let w = positive_product(arena, &px, &ey)?;
-    let t = positive_product(arena, &px, &py)?;
-    let first = sub(arena, &u, &v)?;
-    let second = sub(arena, &w, &t)?;
-    sub(arena, &first, &second)
+    structural::mul(arena, x, y)
 }
 
 /// Sintetiza el racional normalizado usando unidades, suma, logaritmo y negación.
 pub fn rational(arena: &mut Arena, value: Rational) -> Result<NodeId, BuildError> {
-    if value.numerator == 0 {
-        return zero(arena);
-    }
-    let one = arena.one()?;
-    let magnitude = if value.denominator == 2 {
-        let two = add(arena, &one, &one)?;
-        let log_two = logarithm(arena, &two)?;
-        let negative = neg(arena, &log_two)?;
-        exp(arena, &negative)?
-    } else if value.numerator.unsigned_abs() == 2 {
-        add(arena, &one, &one)?
-    } else {
-        one
-    };
-    if value.numerator < 0 {
-        neg(arena, &magnitude)
-    } else {
-        Ok(magnitude)
-    }
+    structural::rational(arena, value)
 }

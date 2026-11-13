@@ -156,7 +156,7 @@ def main():
               "rust": subprocess.check_output(["rustc", "-Vv"], text=True),
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "sources": {str(p.relative_to(ROOT)): sha256(p.read_bytes()) for p in
-                          [ROOT / "src/synth/model.rs", ROOT / "src/synth/scalar.rs", ROOT / "src/synth.rs",
+                          [ROOT / "src/synth.rs", *sorted((ROOT / "src/synth").rglob("*.rs")),
                            ROOT / "examples/verify_components.rs", Path(__file__).resolve()]}}
     write_json(args.output_dir / "report.json", report)
     print(json.dumps({"outcome": {k: v for k, v in outcome.items() if k != "failure"},

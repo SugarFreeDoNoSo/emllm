@@ -6,6 +6,43 @@ esta sección son sobre los reales; no prometen igualdad exacta en `f64`.
 Los restantes nombres son referencias a expresiones, nunca nuevas instrucciones
 ni hojas numéricas. Ninguna construcción necesita evaluar sus argumentos.
 
+## Constructor estructural compartido (benchmark nativo 2.1)
+
+Las fórmulas residen en `src/synth/structural.rs` y sus módulos `scalar`/`model`.
+La interfaz interna `Builder` tiene referencias/errores asociados y únicamente
+`one`, `magma` y resolución de constantes por bits. Su adaptador de `Arena`
+conserva internado, procedencia y `BuildError`; las APIs públicas de `synth`,
+`synth::scalar` y `synth::model` mantienen firmas y son delegaciones a esa única
+implementación. Resolver una constante en la arena expande sus bits con la misma
+síntesis diádica; la interfaz admite resolverla en una futura base inmutable.
+No incorpora evaluación, simplificación numérica ni identidades nuevas.
+
+Antes de extraer las funciones se congeló una huella estructural de 21 raíces
+que cubre racionales, ceros con signo, subnormal, escalares y operaciones del
+modelo: 1897 nodos, FNV-1a de pares/raíces serializados u64 little-endian
+`9a15e07c53639f6f`. `tests/synthesis_structure.rs` verifica que el orden y la
+estructura permanecen, además de los contratos anteriores de errores y precisión.
+
+Verificación completa tras la extracción: **280688/280688 escalares**,
+**6599/6599 operaciones** y **901/901 composiciones** (631 dots, 48 RMSNorm,
+160 softmax, 62 SwiGLU), con las tolerancias fijadas y diferencia cero entre
+evaluadores. Máximas fracciones del umbral: `3.126478192134047e-7`,
+`2.176523734359192e-5` y `0.0020050764041026478`, respectivamente.
+Los verificadores incluyen ahora hashes de todos los módulos de síntesis.
+
+```sh
+cargo test --release
+cargo test --release --example verify_components
+target/tiny-model/venv/bin/python -B tools/verify_scalar_corpus.py --output-dir target/analysis/native-shared-builder/scalars
+target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py --output-dir target/analysis/native-shared-builder/operations
+target/tiny-model/venv/bin/python -B tools/verify_component_corpus.py --output-dir target/analysis/native-shared-builder/components
+```
+
+Pasaron 65 pruebas Rust, 20 doctests, tres pruebas del ejemplo de componentes,
+22 pruebas Python, Clippy y rustdoc con advertencias como errores. Estos corpus
+acreditan la extracción de las expansiones; la composición del Transformer
+completo conserva su propia puerta de aceptación.
+
 ## Exponencial y cero
 
 Definimos:

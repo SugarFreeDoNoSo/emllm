@@ -53,7 +53,7 @@ def main():
               "rust": subprocess.check_output(["rustc", "-Vv"], text=True),
               "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "sources": {str(path.relative_to(ROOT)): sha256(path.read_bytes()) for path in
-                          [ROOT / "src/synth/model.rs", ROOT / "src/synth/scalar.rs", ROOT / "src/synth.rs", ROOT / "examples/verify_operations.rs"]}}
+                          [ROOT / "src/synth.rs", *sorted((ROOT / "src/synth").rglob("*.rs")), ROOT / "examples/verify_operations.rs"]}}
     write_json(args.output_dir / "report.json", report)
     print(json.dumps({"outcome": outcome, "evidence": str(args.output_dir)}, indent=2))
     return result.returncode

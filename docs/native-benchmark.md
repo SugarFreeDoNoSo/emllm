@@ -21,8 +21,10 @@ combinación. Cada muestra debe validarse numéricamente fuera del cronómetro.
 Los pares agrupan canales reales y conservan ambas componentes y su orden;
 su número de elementos no implica ahorrar el 50 % de memoria o trabajo.
 
-Actualmente está verificada la base de datos y referencias (tarea 1.1); todavía
-no hay preparación nativa ni inferencia completa de este experimento.
+Están verificadas la base de datos/referencias, los presupuestos, el supervisor
+y las expansiones compartidas (1.1–1.3, 2.1); todavía no hay preparación nativa
+ni inferencia completa de este experimento. La evidencia de extracción y corpus
+está en [síntesis](synthesis.md#constructor-estructural-compartido-benchmark-nativo-21).
 [`benchmark-tiny-model-eml`](../openspec/changes/benchmark-tiny-model-eml/tasks.md)
 conserva **13/29 tareas**, con su límite histórico de 10000000 nodos descrito en
 [tiny-model.md](tiny-model.md#revision-de-la-puerta-numerica-completa-y-bloqueo-de-recursos).
