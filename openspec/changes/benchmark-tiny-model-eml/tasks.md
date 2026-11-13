@@ -7,7 +7,7 @@
 ## 2. Checkpoint, formato y referencias reproducibles
 
 - [x] 2.1 Fijar revisiones y dependencias de desarrollo y preparar el checkpoint original y tok512 desde las URLs de `design.md`, registrando SHA-256 y formas reales. Generar y persistir los prefijos de 8/16 IDs del texto fijado antes de ejecutar EML; verificar BOS, posiciones, configuración esperada, alias y un rechazo reproducible al alterar el hash. Documentar la receta de preparación en `docs/tiny-model.md`.
-- [ ] 2.2 Implementar `tools/import_model.py` y documentar el formato canónico v1 byte a byte, incluidos límites, endian, catálogo, alias y constantes auxiliares. Verificar igualdad de bits de todos los pesos contra el origen y dos exportaciones con contenido idéntico; añadir fixtures pequeñas y comprobaciones de formato/alias que no requieran descargar el modelo.
+- [x] 2.2 Implementar `tools/import_model.py` y documentar el formato canónico v1 byte a byte, incluidos límites, endian, catálogo, alias y constantes auxiliares. Verificar igualdad de bits de todos los pesos contra el origen y dos exportaciones con contenido idéntico; añadir fixtures pequeñas y comprobaciones de formato/alias que no requieran descargar el modelo.
 - [ ] 2.3 Añadir `src/model_io.rs` con tipos validados, metadatos escalares por bits y límites explícitos, usando solo `std`. Verificar round-trip con el exportador, formas correctas y rechazos de truncamiento, versión, NaN/infinito, alias, offsets, desbordamiento de tamaños y exceso de carga antes de construir nodos; documentar API y errores junto al formato.
 - [ ] 2.4 Implementar `tools/reference.py` con referencia original F32 y fórmulas explícitas F32/F64 independientes de EML; verificar la versión explícita F32 contra el original y auditar dtype de todas las etapas, evitando conversiones ocultas a F32 en la ruta F64. Generar trazas de ambos prefijos y el corpus determinista de escalares/productos/reducciones descrito en el diseño, con hashes y procedencia por tensor/índice.
 - [ ] 2.5 Completar la documentación de datos y referencias con comandos, versiones, política de precisión y criterios de comparación; reproducir desde los archivos fijados ambas referencias y comprobar que producen 512 logits finitos por prefijo, entradas idénticas y trazas identificadas. Registrar diferencias F32/F64 como evidencia, no como resultados EML.
@@ -82,3 +82,9 @@
 - Preparador `tools/prepare_tiny.py`, fuentes con SHA-256 fijados, lock de 12 paquetes con hashes y fixtures de IDs versionadas. Entorno aislado: CPython 3.12.12, PyTorch 2.9.1, NumPy 2.2.6 y SentencePiece 0.2.1.
 - Checkpoint inspeccionado: 260032 parámetros únicos, cinco bloques, dimensión 64, MLP 172, cabezas Q/KV 8/4, vocabulario/contexto 512/512 y alias embedding/salida comprobado por storage, offset y bits.
 - Dos preparaciones offline producen metadata e inputs idénticos; corrupción del `.pt` del mismo tamaño rechazada con código 1 y sin salida parcial. Dos pruebas locales satisfactorias; receta y hashes del resultado en `docs/tiny-model.md`, evidencia en `target/analysis/tiny-input-preparation/`.
+
+## Evidencia de exportacion (2.2)
+
+- `tools/import_model.py` produce EMLTINY v1 documentado byte a byte y conserva el alias de salida. Los 47 tensores de pesos propietarios coinciden por bits con `.pt` y `.bin`.
+- Paquete: 52 entradas, 1043208 bytes, SHA-256 `434011a9e90db0bd15b39b80f11676c9b238b27ca8c526a9b0b87efc5b02ecd5`. Dos exportaciones completas idénticas; metadata de constantes y procedencia en el manifiesto.
+- Seis pruebas Python satisfactorias, incluyendo fixture binaria de 176 bytes independiente del modelo. Evidencia local: `target/analysis/tiny-canonical-export/`.

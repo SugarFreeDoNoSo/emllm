@@ -90,3 +90,23 @@ Una copia del `.pt` con un bit alterado, conservando el tamaño, termina con
 `hash_mismatch: stories260K.pt`, código de salida 1 y sin publicar metadata
 parcial. Pasaron también las dos pruebas locales de corrupción, truncamiento y
 datos extra. Evidencia: `target/analysis/tiny-input-preparation/`.
+
+## Exportación canónica
+
+```sh
+target/tiny-model/venv/bin/python -B tools/import_model.py --offline
+```
+
+Se generan `target/tiny-model/canonical/model.emltiny`, `manifest.json` y la
+metadata de preparación asociada. El [formato binario v1](tiny-model-format.md)
+documenta cada byte, inventario, alias, límites y constantes. La exportación
+comprueba los pesos contra los originales `.pt` y `.bin` y verifica su propio
+round-trip antes de publicar el paquete.
+
+Verificación de la tarea 2.2: 47 tensores de pesos propietarios coinciden bit a
+bit con ambas fuentes; la salida conserva el alias a embedding. El paquete
+tiene 52 entradas y 1.043.208 bytes, SHA-256
+`434011a9e90db0bd15b39b80f11676c9b238b27ca8c526a9b0b87efc5b02ecd5`.
+Dos exportaciones produjeron binario y manifiesto idénticos. Pasaron seis pruebas
+locales de integridad/formato, incluidas corrupción, alias, valores no finitos y
+límites. Evidencia: `target/analysis/tiny-canonical-export/`.
