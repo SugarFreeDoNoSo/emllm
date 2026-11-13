@@ -290,7 +290,7 @@ impl PreparedBase {
         Ok(self.pair_index.get(&pair).map(|&index| self.handle(index)))
     }
 
-    fn validate(&self, reference: &BaseRef) -> Result<usize, NativeError> {
+    pub(crate) fn validate(&self, reference: &BaseRef) -> Result<usize, NativeError> {
         if !Arc::ptr_eq(&self.identity, &reference.identity) {
             return Err(NativeError {
                 phase: Phase::Base,
@@ -308,7 +308,7 @@ impl PreparedBase {
         Ok(reference.index)
     }
 
-    fn handle(&self, index: usize) -> BaseRef {
+    pub(crate) fn handle(&self, index: usize) -> BaseRef {
         BaseRef {
             identity: self.identity.clone(),
             index,

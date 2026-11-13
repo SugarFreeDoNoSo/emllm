@@ -3,8 +3,10 @@
 
 mod limits;
 mod prepared;
+mod template;
 
 pub use limits::{NativeError, NativeErrorKind, NativeLimits, Phase, Resource};
 pub use prepared::{
     BaseRef, BaseStorage, BaseTensor, PreparationError, PreparedBase, SYNTHESIS_VERSION,
 };
+pub use template::{Template, TemplateBuilder, TemplateRef, TemplateStats};

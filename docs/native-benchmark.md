@@ -284,3 +284,32 @@ Python comprueba todos los bits, formas, alias, valores y raíces contra el paqu
 las pruebas negativas rechazan paquete incompatible, raíz alterada y valor no
 finito. Pasan también procedencia, límites, supervivencia tras liberar fuentes,
 68 pruebas Rust, 20 doctests, Clippy y rustdoc con advertencias como errores.
+
+## Plantillas parametrizadas (2.3)
+
+`TemplateBuilder` recibe una base compartida, número de puertos y presupuesto;
+no recibe tokens. Sus índices internos distinguen base `[0,B)`, puertos
+`[B,B+P)` e instrucción i en `B+P+i`. Solo los handles con identidad propia
+pueden introducir dependencias; se rechazan referencias ajenas, futuras y fuera
+de rango. `Builder` adapta las mismas expansiones a esta representación. Las
+constantes se resuelven por bits en la base y una constante ausente produce error.
+
+Magma consulta el índice inmutable de base y después el internado local de
+plantilla. `finish` comprueba toda la topología, incluidas instrucciones no
+alcanzables, conserva orden/duplicados de raíces y recorta su clausura sin
+evaluarla. Libera el índice de construcción antes de reservar un remapeo denso;
+compacta los pares in-place. La capacidad del vector puede superar su longitud
+después del recorte y se informa como tal. La base permanece compartida e intacta.
+
+`TemplateStats` distingue instrucciones construidas/retenidas, puertos, raíces,
+payloads, capacidades y capacidad histórica del internado ya liberado. Una
+plantilla sigue conteniendo parámetros y **no es un `Program` evaluable**;
+dos doctests comprueban esa frontera y los campos privados de `TemplateRef`.
+Tres pruebas comprueban puertos/raíces repetidos, constantes compartidas,
+recorte, procedencia, límites inclusivos y fixtures internas inválidas/cíclicas.
+
+```sh
+cargo test --release --lib native::template
+cargo test --release --doc
+cargo clippy --all-targets -- -D warnings
+```

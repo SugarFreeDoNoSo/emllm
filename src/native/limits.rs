@@ -79,6 +79,14 @@ pub enum NativeErrorKind {
         index: usize,
     },
     EmptyConstants,
+    EmptyRoots,
+    MissingConstant {
+        bits: u32,
+    },
+    TemplateTopology {
+        instruction: usize,
+        operand: usize,
+    },
     Compile(crate::program::CompileError),
     Limit {
         resource: Resource,
@@ -103,7 +111,7 @@ pub struct NativeError {
 }
 
 impl NativeError {
-    fn overflow(phase: Phase, resource: Resource) -> Self {
+    pub(crate) fn overflow(phase: Phase, resource: Resource) -> Self {
         Self {
             phase,
             kind: NativeErrorKind::SizeOverflow { resource },
@@ -132,6 +140,17 @@ impl fmt::Display for NativeError {
                 write!(f, "invalid native reference {index}")
             }
             NativeErrorKind::EmptyConstants => write!(f, "at least one constant is required"),
+            NativeErrorKind::EmptyRoots => write!(f, "at least one root is required"),
+            NativeErrorKind::MissingConstant { bits } => {
+                write!(f, "unprepared constant {bits:08x}")
+            }
+            NativeErrorKind::TemplateTopology {
+                instruction,
+                operand,
+            } => write!(
+                f,
+                "instruction {instruction} has nonprevious operand {operand}"
+            ),
             NativeErrorKind::Compile(error) => write!(f, "{error}"),
             NativeErrorKind::Limit {
                 resource,
