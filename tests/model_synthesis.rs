@@ -192,6 +192,75 @@ fn shifted_arithmetic_handles_signs_cancellation_and_historical_overflow() {
 }
 
 #[test]
+fn positive_sum_and_normalization_cover_wide_dynamic_ranges() {
+    use emllm::synth::model;
+    for (x, y) in [
+        (3287.1726_f32, 18.49444_f32),
+        (2.781185e12, 2.1137395e-23),
+        (2.1137395e-23, 2.781185e12),
+        (1e-23, 1e-23),
+        (0.75, 0.25),
+    ] {
+        let mut arena = Arena::new(10_000);
+        let a = synthesize(&mut arena, F32Bits::new(x.to_bits()).unwrap()).unwrap();
+        let b = synthesize(&mut arena, F32Bits::new(y.to_bits()).unwrap()).unwrap();
+        let sum = model::add_positive(&mut arena, &a, &b).unwrap();
+        let normalized = model::divide_positive(&mut arena, &a, &sum).unwrap();
+        let program = compile(&arena, &[sum, normalized], 10_000).unwrap();
+        drop(arena);
+        let p = plan(
+            &program,
+            PlanLimits {
+                max_nodes: 10_000,
+                max_slots: 10_000,
+            },
+        )
+        .unwrap();
+        let (x, y) = (f64::from(x), f64::from(y));
+        for ((actual, planned), expected) in evaluate(&program, 10_000)
+            .unwrap()
+            .into_iter()
+            .zip(run(&p, 10_000).unwrap())
+            .zip([x + y, x / (x + y)])
+        {
+            assert!((actual - expected).abs() <= 1e-6 + 1e-5 * expected.abs());
+            assert!((planned - actual).abs() <= 1e-12 + 1e-12 * actual.abs());
+        }
+    }
+}
+
+#[test]
+fn positive_arithmetic_rejects_nonpositive_values_and_foreign_handles() {
+    use emllm::{eval::EvalErrorKind, synth::model};
+    for operation in [model::add_positive, model::divide_positive] {
+        for value in [0.0_f32, -1.0] {
+            let mut arena = Arena::new(10_000);
+            let invalid = synthesize(&mut arena, F32Bits::new(value.to_bits()).unwrap()).unwrap();
+            let one = arena.one().unwrap();
+            for (a, b) in [(&invalid, &one), (&one, &invalid)] {
+                let root = operation(&mut arena, a, b).unwrap();
+                let program = compile(&arena, &[root], 10_000).unwrap();
+                let p = plan(
+                    &program,
+                    PlanLimits {
+                        max_nodes: 10_000,
+                        max_slots: 10_000,
+                    },
+                )
+                .unwrap();
+                let error = evaluate(&program, 10_000).unwrap_err();
+                assert_eq!(error.kind, EvalErrorKind::LogDomain);
+                assert_eq!(run(&p, 10_000).unwrap_err(), error);
+            }
+            assert_eq!(
+                operation(&mut Arena::new(10_000), &invalid, &one),
+                Err(BuildError::ForeignReference)
+            );
+        }
+    }
+}
+
+#[test]
 fn candidate_operations_propagate_foreign_handles_budgets_and_domain_errors() {
     use emllm::{eval::EvalErrorKind, synth::model};
     let mut origin = Arena::new(10_000);

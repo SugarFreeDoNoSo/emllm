@@ -221,6 +221,9 @@ de operaciones y componentes además de esta síntesis escalar.
 
 ## Puerta de operaciones verificada (4.3)
 
+Las cifras de esta sección corresponden a **0f576de**. La revisión 4.4 al final
+reduce de nuevo el producto y verifica también todas las composiciones.
+
 La suma desplazada, el producto normalizado y el denominador directo de SiLU
 superan **6599/6599 operaciones**, con ambos evaluadores y la tolerancia fijada
 `1e-6 + 1e-5*abs(ref)`. Máximos por programa: V=1013, E=2024, R=1, D=569,
@@ -243,6 +246,9 @@ no hay ejecución del Transformer en EML ni comparación completa de motores.
 
 ## Puerta de composiciones: bloqueo en 4.4
 
+**Histórico de f7c5fda.** El desbordamiento de softmax descrito aquí está
+resuelto por la [revisión posterior](#revision-de-la-puerta-numerica-completa-y-bloqueo-de-recursos).
+
 ```sh
 target/tiny-model/venv/bin/python -B tools/verify_component_corpus.py
 # Reproducción del caso completo fallido, sin checkpoint ni Python:
@@ -251,8 +257,8 @@ cargo run --release --example verify_components -- tests/fixtures/tiny-softmax-b
 cargo test --release --example verify_components
 ```
 
-Los dos primeros comandos terminan con código **1**, con el mismo error.
-Las dos pruebas locales pasan; su alcance no sustituye la puerta del corpus.
+En f7c5fda los dos primeros comandos terminaban con código **1**, con el mismo
+error. Las dos pruebas locales pasaban; su alcance no sustituía la puerta del corpus.
 
 ### Datos, construcción y cobertura
 
@@ -372,6 +378,130 @@ capacidades sobrantes y temporales. Usan tamaños reales de 16 bytes por par y
 Esta proyección queda por encima de los presupuestos y no acredita viabilidad
 de recursos; deberá refinarse antes de solicitar la expansión completa.
 
-**Estado: 4.4 pendiente y apply pausado en 13/29.** Hay que revisar la composición
+**Estado en f7c5fda: 4.4 pendiente y apply pausado en 13/29.** Había que revisar la composición
 numérica de softmax y el coste por operación antes de continuar con tensores,
 Transformer o la aceptación completa entre motores.
+
+## Revision de la puerta: numerica completa y bloqueo de recursos
+
+La suma positiva en dominio logarítmico y el cociente positivo resuelven el
+desbordamiento de softmax conservando el primer score como pivote y la reducción
+balanceada. El producto firmado recupera su escala como
+`4096*(q+1/8)-512`, en lugar de doce duplicaciones. Identidades, dominios y bits
+fijos en [síntesis](synthesis.md#revisión-numérica-de-composiciones-44).
+
+```sh
+target/tiny-model/venv/bin/python -B tools/verify_operation_corpus.py \
+  --output-dir target/analysis/operation-synthesis-rescaled
+target/tiny-model/venv/bin/python -B tools/verify_component_corpus.py \
+  --output-dir target/analysis/component-synthesis-log-domain
+cargo run --release --example verify_components -- tests/fixtures/tiny-softmax-blocker.txt
+```
+
+Los tres comandos pasan. **6599/6599 operaciones y 901/901 composiciones**
+cumplen las tolerancias con ambos evaluadores. Los hashes del corpus, casos
+derivados y protocolo son los mismos del primer recorrido; no se excluyen ni
+modifican entradas. Mayor fracción del umbral: `2.176523734359192e-5` en
+operaciones y `0.0020050764041026478` en composiciones. Diferencial cero.
+
+| Familia | Casos verificados | V máximo | E máximo | R máximo | D máximo | Posiciones máximas |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Dot 8 | 70 | 4484 | 8966 | 1 | 389 | 31 |
+| Dot 64 | 490 | 31140 | 62278 | 1 | 467 | 99 |
+| Dot 172 | 71 | 80840 | 161678 | 1 | 509 | 184 |
+| RMSNorm | 48 | 34556 | 69110 | 64 | 627 | 341 |
+| Softmax | 160 | 4577 | 9152 | 16 | 444 | 34 |
+| SwiGLU | 62 | 86790 | 173578 | 172 | 456 | 252 |
+
+Cada columna puede proceder de un caso diferente. La fixture histórica de
+softmax ahora tiene V/E/R/D=2157/4312/8/356 y 24 posiciones; su fracción del
+umbral es ≈3.93e-9. Máxima capacidad+metadata por caso del recorrido completo:
+2794360 bytes original y 4186336 planificado. RSS del proceso Rust completo
+de verificación: **31670272 bytes**, mediante `/usr/bin/time -l` en macOS, con
+el mismo alcance de fases declarado anteriormente. Se mantienen los límites
+por caso. El reporte conserva el desglose por estructura y buffer.
+
+### Medición de pesos compartidos: fallo real del presupuesto
+
+```sh
+target/tiny-model/venv/bin/python -B tools/measure_synthesis_cost.py \
+  --components-dir target/analysis/component-synthesis-log-domain \
+  --output-dir target/analysis/synthesis-shared-cost-confirmed
+# Medidor Rust directo sobre el paquete validado:
+cargo run --release --example synthesis_cost -- target/tiny-model/canonical/model.emltiny
+```
+
+Ambos terminan con código **1**. La herramienta verifica hashes de fuentes y
+referencias y exige el reporte numérico satisfactorio de componentes antes de
+medir. El lector Rust valida el paquete; el medidor sintetiza una sola vez cada
+patrón de peso en una arena común, con internado y caché de handles por bits.
+El alias de salida no duplica embedding. No carga activaciones ni ejecuta
+aritmética del Transformer.
+
+Inventario: **47 tensores propietarios, 260032 escalares y 259577 patrones
+de bits distintos**. Se alcanza `NodeLimit { limit: 10000000 }` tras construir
+**106386 patrones distintos**. Primer valor que no puede completarse:
+
+- `layers.1.feed_forward.w2.weight[28,104]`, índice lineal 4920.
+- Bits **0x3d14ebf3**, F32 exacto **0.036357831209897995**.
+- La arena llega exactamente a **10000000 nodos**. No se obtiene un programa
+  completo de pesos ni se llega a compilar, planificar o evaluar esa etapa.
+- Repetición con idéntico límite, ubicación y contador; RSS observado en la
+  confirmación: **1003044864 bytes**. Incluye carga, calibración previa y el
+  intento de construcción de pesos, no Python ni compilación Rust. No es RSS
+  del modelo ni de evaluación.
+
+El mismo escalar aislado pasa:
+
+```sh
+cargo run --release --example verify_scalars -- --bits 3d14ebf3
+```
+
+Requiere V=297, D=291 y seis posiciones; error ≈2.08e-17. El bloqueo actual
+es la acumulación estructural del checkpoint en una arena, no su precisión
+individual. La aceptación de escalares de 4.2 sigue siendo válida.
+
+### Coste marginal y estimación revisada
+
+El medidor selecciona por orden canónico los primeros 128 patrones de peso
+distintos, 64 por lado. Prepara la primera fila y columna de productos para
+compartir las transformaciones unarias y constantes; después mide los otros
+63×63 pares y su reducción balanceada. La selección usa solo metadatos;
+esta calibración mide estructura y no se presenta como inferencia numérica.
+
+- **3969 productos:** exactamente **24 nodos nuevos** por par.
+- **3968 sumas:** exactamente **15 nodos nuevos** por suma.
+- Repetir un mismo par ya construido añade **cero nodos**.
+- Preparación por nuevo operando, descontado el producto: 33 nodos a izquierda
+  y 24 a derecha; inicialización común de la primera pareja: 209 nodos.
+
+Esta medida sustituye la extrapolación basada en constantes resintetizadas
+por cada operación aislada. Para las formas completas, la estimación de las
+operaciones lineales/atención usa `24*MACs + 15*sumas_balanceadas`. El inventario
+ampliado añade preparación de operandos, máximos de componentes cerrados,
+RoPE, escalado de scores, residuales y constantes auxiliares:
+
+| Prefijo | MACs | Sumas balanceadas | Nodos estimados del núcleo lineal/atención | Inventario ampliado, excluida síntesis de pesos |
+| --- | ---: | ---: | ---: | ---: |
+| 8 | 1868288 | 1839776 | 72435552 | 86952895 |
+| 16 | 3744768 | 3685696 | 145159872 | 169572207 |
+
+El payload pares+instrucciones correspondiente al inventario ampliado sería
+3478115760/6782888240 bytes, **todavía sin la síntesis de pesos**. Su coste
+completo es no disponible por el fallo de presupuesto: no se sustituye por cero.
+No se estiman todavía las posiciones de ejecución del modelo completo.
+
+Son estimaciones condicionales, no cotas ni RSS: asumen ocurrencias binarias
+distintas tras las transformaciones compartidas; una repetición estructural
+exacta compartiría nodos. Los máximos de componentes cerrados sobrecuentan
+constantes y activaciones importadas respecto de una composición completa.
+Se cuentan las posiciones de los cinco bloques; al compilar únicamente los
+logits, algunas salidas intermedias podrían quedar fuera de la clausura.
+Se excluyen capacidades sobrantes, asignador, internado y temporales de
+compilación/planificación. El JSON detalla todas las familias y supuestos.
+
+**Estado: 4.4 pendiente, 13/29 tareas completas.** El límite de construcción
+de 10000000 nodos se agota ya con parte de los pesos compartidos. Los presupuestos
+del siguiente hito (también 1000000 posiciones y 2 GiB de proceso) no quedan
+acreditados por pasar la puerta numérica. Se requiere revisar el coste de la
+síntesis de constantes y del DAG antes de la integración dependiente.

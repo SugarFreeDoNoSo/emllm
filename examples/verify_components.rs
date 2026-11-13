@@ -113,13 +113,17 @@ fn parse(text: &str) -> Result<Vec<Case>, Box<dyn Error>> {
     Ok(cases)
 }
 
-fn balanced_sum(arena: &mut Arena, mut values: Vec<NodeId>) -> Result<NodeId, BuildError> {
+fn balanced_sum(
+    arena: &mut Arena,
+    mut values: Vec<NodeId>,
+    add: fn(&mut Arena, &NodeId, &NodeId) -> Result<NodeId, BuildError>,
+) -> Result<NodeId, BuildError> {
     while values.len() > 1 {
         values = values
             .chunks(2)
             .map(|pair| {
                 if pair.len() == 2 {
-                    model::add(arena, &pair[0], &pair[1])
+                    add(arena, &pair[0], &pair[1])
                 } else {
                     Ok(pair[0].clone())
                 }
@@ -158,14 +162,14 @@ fn build(arena: &mut Arena, input: &Input) -> Result<Vec<NodeId>, BuildError> {
                 .zip(&right)
                 .map(|(a, b)| model::mul(arena, a, b))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(vec![balanced_sum(arena, products)?])
+            Ok(vec![balanced_sum(arena, products, model::add)?])
         }
         "rmsnorm" => {
             let squares = left
                 .iter()
                 .map(|x| model::mul(arena, x, x))
                 .collect::<Result<Vec<_>, _>>()?;
-            let total = balanced_sum(arena, squares)?;
+            let total = balanced_sum(arena, squares, model::add)?;
             let scale = synthesize(arena, F32Bits::new(0x3c80_0000).expect("fixed 1/64"))?;
             let mean = model::mul(arena, &total, &scale)?;
             let epsilon = synthesize(arena, input.epsilon.expect("validated epsilon"))?;
@@ -187,11 +191,10 @@ fn build(arena: &mut Arena, input: &Input) -> Result<Vec<NodeId>, BuildError> {
                     model::exp(arena, &shift)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let total = balanced_sum(arena, exponentials.clone())?;
-            let inverse = model::reciprocal_positive(arena, &total)?;
+            let total = balanced_sum(arena, exponentials.clone(), model::add_positive)?;
             exponentials
                 .iter()
-                .map(|x| model::mul(arena, x, &inverse))
+                .map(|x| model::divide_positive(arena, x, &total))
                 .collect()
         }
         "swiglu" => left
@@ -386,6 +389,13 @@ mod tests {
         for (index, case) in cases.iter().enumerate() {
             check(index, case).unwrap();
         }
+    }
+
+    #[test]
+    fn historical_softmax_overflow_row_matches_both_evaluators() {
+        let cases = parse(include_str!("../tests/fixtures/tiny-softmax-blocker.txt")).unwrap();
+        assert_eq!(cases.len(), 1);
+        check(0, &cases[0]).unwrap();
     }
 
     #[test]

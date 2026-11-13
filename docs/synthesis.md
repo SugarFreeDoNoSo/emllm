@@ -372,7 +372,9 @@ exponente ≈6452.866. La revisión siguiente evita ese intermedio.
 
 ## Expansiones desplazadas y normalizadas verificadas (4.3)
 
-`synth::model` mantiene E y usa las siguientes identidades. A, L y z conservan
+Esta sección registra la revisión **0f576de**. La recuperación de escala y las
+operaciones positivas vigentes se derivan en la revisión 4.4 al final.
+En 0f576de, `synth::model` mantuvo E y usó las siguientes identidades. A, L y z conservan
 sus definiciones originales; solo se invoca A con operandos acotados y una
 orientación fija. Todas las constantes se sintetizan desde One/Magma.
 
@@ -481,3 +483,76 @@ La primera ejecución de esa puerta verifica las 631 reducciones, pero falla
 en un softmax cuyo término exponencial alcanza ≈3287 y vuelve a entrar a E
 dentro de la suma desplazada. La reproducción, cobertura pendiente y costes
 están en [la puerta de composiciones](tiny-model.md#puerta-de-composiciones-bloqueo-en-44).
+
+## Revisión numérica de composiciones (4.4)
+
+### Recuperación del producto con una escala fija
+
+La construcción vigente conserva u=x/64, v=y/64 y los factores positivos
+a=1+u, b=1+v. Reagrupa el offset como `A(a,v)=1+u+v` y forma:
+
+```text
+q = M(A(L(a),L(b)), E(A(a,v))) = u*v
+T_c(q) = R_c(N_m(q)) = c+q
+F_m(x,y) = M(A_m(L(4096),L(T_(1/8)(q))), E(512))
+         = 4096*(q+1/8)-512 = x*y
+```
+
+Esto sustituye las doce duplicaciones. Para el dominio suficiente anterior,
+`|x|,|y|<=32`, `x*y>-256`, tenemos `q>-1/16`, `q<=1/4`; por tanto
+`T_(1/8)(q)` está entre 1/16 y 3/8 y su logaritmo tiene dominio positivo.
+La exponencial de salida interna vale entre 256 y 1536; su **exponente** está
+entre ln(256) y ln(1536). El otro término usa E(512), finito en F64. Se usa
+A_m para sumar los logaritmos: usar A con primer argumento ln(4096) volvería
+a crear una exponencial anidada demasiado grande.
+
+Las constantes 1/8, 4096 y 512 tienen bits `0x3e000000`, `0x45800000` y
+`0x44000000`; se sintetizan en la arena. Esta identidad sigue teniendo
+cancelación y necesita validación, no promete error universal. Las **6599
+operaciones** vuelven a pasar, con V máximo 910, D máximo 441 y 19 posiciones;
+fracción máxima del umbral `2.176523734359192e-5`, diferencial cero.
+Evidencia: `target/analysis/operation-synthesis-rescaled/report.json`.
+
+### Suma y cociente positivos en dominio logarítmico
+
+Para x,y>0:
+
+```text
+J(t) = M(t,E(-1)) = exp(t)+1
+A_+(x,y) = E(A_m(L(x),L(J(S_m(L(y),L(x))))))
+         = exp(ln(x)+ln(1+exp(ln(y)-ln(x)))) = x+y
+D_+(x,y) = E(S_m(L(x),L(y))) = x/y
+```
+
+`synth::model::add_positive` y `divide_positive` implementan estas fórmulas.
+Un dominio real suficiente para A_+ añade `ln(x),ln(y)>-128`, debido a las
+sumas desplazadas. D_+ requiere `ln(x)>-128`. En F64 también deben caber
+logaritmos, diferencias y exponenciales intermedias. J(t) suma 1 directamente
+mediante Magma: no calcula `exp(exp(t))`. SiLU reutiliza esta misma J.
+
+Softmax conserva `ei=E(S_m(si,s0))`, el pivote **s0** y el árbol de pares
+adyacentes; solo cambia las expansiones de suma positiva y división:
+`pi=D_+(ei, sum_+(e))`. Numerador y denominador permanecen conectados en un
+único DAG. No hay máximo nativo, elección de fórmula evaluando operandos ni
+normalización con activaciones externas.
+
+En las 160 filas fijadas, los logaritmos de los operandos de las sumas
+positivas del oráculo están entre -19.779728 y 16.801812; sus diferencias
+entre -20.511209 y 11.662594. El denominador máximo es ≈19813436.74. Son rangos
+observados, no límites universales. Las regresiones locales también normalizan
+pares con magnitudes desde ≈2.1e-23 hasta ≈2.8e12 y comprueban dominio y
+procedencia con ambos evaluadores.
+
+### Resultado y límite de la puerta
+
+Pasan **901/901 composiciones**: 631 productos escalares, 48 RMSNorm, 160
+softmax y 62 filas SwiGLU. Fracción máxima del umbral `0.0020050764041026478`,
+diferencial cero. La fixture histórica de softmax pasa con V/E/R/D
+2157/4312/8/356 y 24 posiciones. Las 60 pruebas Rust, 20 doctests y tres pruebas
+del ejemplo de componentes pasan; se conservan todas las tolerancias.
+
+La **4.4 sigue pendiente por recursos**: sintetizar los pesos compartidos
+agota 10000000 nodos tras 106386 de los 259577 patrones distintos, antes de
+ensamblar el modelo. La síntesis individual sigue siendo correcta; el fallo
+es de presupuesto de construcción. Medición, reproducción y estimación con
+costes marginales en [la revisión de la puerta](tiny-model.md#revision-de-la-puerta-numerica-completa-y-bloqueo-de-recursos).
