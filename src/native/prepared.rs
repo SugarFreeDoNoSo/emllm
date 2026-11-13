@@ -338,6 +338,10 @@ impl PreparedBase {
         Ok(self.pair_index.get(&pair).map(|&index| self.handle(index)))
     }
 
+    pub(crate) fn find_pair_indices(&self, pair: [usize; 2]) -> Option<usize> {
+        self.pair_index.get(&pair).copied()
+    }
+
     pub(crate) fn validate(&self, reference: &BaseRef) -> Result<usize, NativeError> {
         if !Arc::ptr_eq(&self.identity, &reference.identity) {
             return Err(NativeError {

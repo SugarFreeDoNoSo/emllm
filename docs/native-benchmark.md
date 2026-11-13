@@ -333,3 +333,29 @@ Dos pruebas pequeñas verifican el prefijo original de ocho IDs con base de
 vocabulario de prueba, BOS, posiciones, invariancia de base/plantilla y rechazo
 de longitud/posición incorrecta, ID 512, símbolos ajenos/no registrados y
 presupuesto cero. `cargo test --release --lib native::codec` y Clippy pasan.
+
+## Grafo cerrado por solicitud (3.1)
+
+`CompositionBuilder::new` crea identidad, delta e internado nuevos sobre la base
+inmutable. Cada Magma valida procedencia, consulta base/internado local y comprueba
+el presupuesto de **base completa + delta**, antes de reservar. Los hijos son
+anteriores al padre y One permanece único. `finish` conserva posiciones/duplicados
+de raíces, retiene dependencias y libera el internado; entrega `NativeOutput`
+cerrado con identidad propia. No retiene plantilla ni estado numérico.
+
+`CompositionBuilder::extend` consume explícitamente una salida previa mediante
+propiedad compartida y permite importar sus raíces como operandos, incluso tras
+liberar los handles externos. Esa operación tiene un delta y coste propios;
+su búsqueda de pares de salidas anteriores es lineal. Las repeticiones del
+benchmark usarán siempre `new(base)`, nunca esta ampliación de una salida.
+Los handles coincidentes por índice de distintas solicitudes se rechazan.
+
+`OutputStorage` cuenta el delta vivo y las raíces por payload/capacidad, identifica
+nodos compartidos y separa la capacidad histórica del internado liberado. La base
+y las salidas retenidas se cuentan una sola vez en el total compartido, además
+de cada delta y de la metadata; estos contadores no representan RSS.
+
+Dos pruebas comprueban cierre/hijos anteriores, One único, aislamiento, presupuesto
+base+delta, fallo sin modificar base, liberación de constructores y consumo de una
+salida sin decodificar, incluso con una expresión de dominio numérico inválido.
+`cargo test --release --lib native::compose` y Clippy pasan.
