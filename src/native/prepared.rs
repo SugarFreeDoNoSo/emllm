@@ -139,6 +139,54 @@ pub struct BaseStorage {
 }
 
 impl PreparedBase {
+    /// Modelo diminuto solo para fixtures internas: embeddings pequeños y alias.
+    #[cfg(test)]
+    pub(crate) fn vocabulary_fixture(vocab: usize, channels: usize) -> Self {
+        let mut builder = BaseBuilder::new(NativeLimits::default());
+        let mut vocabulary = Vec::new();
+        for id in 0..vocab {
+            vocabulary.push(builder.register(vocabulary_bits(id as u32)).unwrap());
+        }
+        let entries: Vec<_> = (0..vocab * channels)
+            .map(|i| builder.register(vocabulary_bits((i % 3) as u32)).unwrap())
+            .collect();
+        let tensors = vec![
+            BaseTensor {
+                kind: TensorKind::Embedding,
+                layer: None,
+                dimensions: [vocab, channels],
+                rank: 2,
+                alias: None,
+                entries: 0..entries.len(),
+            },
+            BaseTensor {
+                kind: TensorKind::Output,
+                layer: None,
+                dimensions: [vocab, channels],
+                rank: 2,
+                alias: Some(0),
+                entries: 0..entries.len(),
+            },
+        ];
+        builder
+            .finish(
+                tensors,
+                entries,
+                vocabulary,
+                Some(ModelConfig {
+                    dim: channels as u32,
+                    hidden_dim: channels as u32,
+                    n_layers: 1,
+                    n_heads: 1,
+                    n_kv_heads: 1,
+                    vocab_size: vocab as u32,
+                    max_seq_len: 512,
+                    rope_positions: 16,
+                }),
+            )
+            .unwrap()
+    }
+
     /// Base pequeña para composiciones y pruebas. No representa stories260K ni
     /// incluye vocabulario/auxiliares de modelo; no admite una lista vacía.
     pub fn from_constants(

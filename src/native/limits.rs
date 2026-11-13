@@ -80,6 +80,20 @@ pub enum NativeErrorKind {
     },
     EmptyConstants,
     EmptyRoots,
+    Shape {
+        expected: usize,
+        actual: usize,
+    },
+    Position {
+        index: usize,
+        actual: usize,
+    },
+    TokenRange {
+        id: u32,
+    },
+    InvalidSymbol {
+        id: u32,
+    },
     MissingConstant {
         bits: u32,
     },
@@ -141,6 +155,18 @@ impl fmt::Display for NativeError {
             }
             NativeErrorKind::EmptyConstants => write!(f, "at least one constant is required"),
             NativeErrorKind::EmptyRoots => write!(f, "at least one root is required"),
+            NativeErrorKind::Shape { expected, actual } => {
+                write!(f, "expected length {expected}, got {actual}")
+            }
+            NativeErrorKind::Position { index, actual } => {
+                write!(f, "expected position {index}, got {actual}")
+            }
+            NativeErrorKind::TokenRange { id } => {
+                write!(f, "token {id} is outside prepared vocabulary")
+            }
+            NativeErrorKind::InvalidSymbol { id } => {
+                write!(f, "unregistered native symbol for token {id}")
+            }
             NativeErrorKind::MissingConstant { bits } => {
                 write!(f, "unprepared constant {bits:08x}")
             }

@@ -313,3 +313,23 @@ cargo test --release --lib native::template
 cargo test --release --doc
 cargo clippy --all-targets -- -D warnings
 ```
+
+## Prefijos codificados (2.4)
+
+`NativePrefix::encode` valida longitud y posiciones consecutivas desde cero y
+asocia cada ID con un `NativeSymbol` registrado en la base. Conserva BOS y orden;
+ID 512 se rechaza. `from_symbols` comprueba procedencia y correspondencia exacta
+entre ID y raíz registrada; no acepta una expresión arbitraria con igual valor.
+Los campos de símbolo/prefijo son privados. `validate_for` permite repetir estas
+comprobaciones al comenzar la futura composición cronometrada.
+
+La codificación consulta exclusivamente el vocabulario: no selecciona filas de
+embedding, asocia puertos ni aumenta base/plantilla. El prefijo conserva una
+referencia compartida a la base y vectores propios de símbolos/posiciones.
+`storage_bytes` distingue payload/capacidad, excluyendo base compartida y bloques
+de control Arc. Este coste es de codificación y queda fuera del tiempo nativo.
+
+Dos pruebas pequeñas verifican el prefijo original de ocho IDs con base de
+vocabulario de prueba, BOS, posiciones, invariancia de base/plantilla y rechazo
+de longitud/posición incorrecta, ID 512, símbolos ajenos/no registrados y
+presupuesto cero. `cargo test --release --lib native::codec` y Clippy pasan.
