@@ -3,5 +3,7 @@
 //! numérico. Cada plan presta su programa inmutable y no contiene resultados.
 
 mod plan;
+mod run;
 
 pub use plan::{ExecutionPlan, PlanError, PlanLimits, PlanStats, plan};
+pub use run::run;

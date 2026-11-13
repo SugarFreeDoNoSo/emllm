@@ -119,7 +119,7 @@ pub fn evaluate(program: &Program, max_nodes: usize) -> Result<Vec<f64>, EvalErr
     Ok(program.roots().iter().map(|&root| values[root]).collect())
 }
 
-fn magma_value(left: f64, right: f64, index: usize) -> Result<f64, EvalError> {
+pub(crate) fn magma_value(left: f64, right: f64, index: usize) -> Result<f64, EvalError> {
     let error = |kind| EvalError {
         kind,
         node: Some(index),
