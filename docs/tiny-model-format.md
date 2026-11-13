@@ -104,3 +104,42 @@ sustituir división por la raíz por multiplicación por esta escala.
 `manifest.json` conserva hashes del paquete, cada tensor, inputs, información de
 origen y exportador, junto con la política de constantes. Los hashes de todos
 los pesos importados deben coincidir con sus tensores originales.
+
+## API Rust y errores
+
+`model_io::read_package(&[u8], LoadLimits)` devuelve un `Package` con cabecera,
+directorio y escalares finitos validados. `read_stories260k` devuelve `Stories260K`
+y comprueba además todos los campos de configuración, orden/inventario, formas,
+alias único de salida y bits exactos de epsilon (`0x3727c5ac`) y escala
+(`0x3eb504f3`). No acredita por sí solo el hash del checkpoint: esa verificación
+pertenece a las herramientas externas y al manifiesto.
+
+Los tipos válidos tienen campos privados. Prestan los bytes del llamador y no
+copian el payload; los alias comparten la misma región. `Tensor::shape`, `kind`,
+`layer`, `alias`, `byte_offset`, `bytes` y `scalars` permiten inspección inmutable.
+`F32Bits::bits()` conserva los bits y `to_f64()` eleva exactamente el valor para
+diagnósticos; estos datos no son nodos ejecutables. Ninguna carga construye EML.
+
+`LoadLimits { max_bytes, max_tensors }` es obligatorio. Se comprueban tamaño real
+y declarado, producto de dimensiones y suma offset/tamaño antes de indexar o
+reservar el directorio, cuya reserva es falible. El payload ya existe en el
+slice prestado: el llamador también debe acotar su lectura del archivo.
+
+`LoadError` implementa `Display` y `Error` y expone categoría, campo y entrada del
+directorio (`None` para fallos de cabecera/archivo). Categorías: `ByteLimit`,
+`TensorLimit`, `Truncated`, `Magic`, `Version`, `Dimension`, `Layout`, `TensorKind`,
+`DuplicateTensor`, `Shape`, `SizeOverflow`, `Alias`, `NonFinite`, `Configuration`,
+`Inventory`, `Constant` y `Allocation`. No se devuelve un objeto parcial válido.
+
+```sh
+cargo test --release --test model_io
+cargo run --release --example inspect_tiny -- target/tiny-model/canonical/model.emltiny
+# Añadir --bits exporta todos los u32 decodificados para comparación entre lenguajes.
+target/tiny-model/venv/bin/python -B tools/verify_model_io.py
+```
+
+Las pruebas locales comprueban la fixture compartida con Python, todos sus
+truncamientos, límites inclusivos, NaN/inf, tamaños desbordados, alias, formas y
+un modelo estructural sintético. Los pesos cero de ese último no constituyen
+evidencia del checkpoint entrenado; la comprobación externa compara todos los
+bits del paquete real con el exportador.

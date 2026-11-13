@@ -70,6 +70,7 @@
 
 pub mod eval;
 pub mod expr;
+pub mod model_io;
 pub mod network;
 pub mod program;
 pub mod synth;
