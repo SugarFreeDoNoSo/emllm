@@ -204,3 +204,17 @@ El corpus evidencia un rango amplio: mínimo `-48.26185607910156` en
 en `prefix16/layers.1.probabilities[489]`. Estas magnitudes forman parte de la
 puerta pendiente de síntesis; la finitud de PyTorch no demuestra que EML pueda
 representarlas o ejecutar las operaciones dentro de los límites.
+
+## Puerta escalar verificada (4.2)
+
+```sh
+target/tiny-model/venv/bin/python -B tools/verify_scalar_corpus.py
+```
+
+Los **280688 escalares distintos** pasaron síntesis One/Magma y ambos evaluadores
+con `1e-9 + 1e-7*abs(ref)`. Máximos por escalar: 829 nodos, profundidad 823 y ocho
+posiciones numéricas; límites de 10000 nodos/posiciones. Máxima fracción del
+umbral: `3.1264782e-7`. La receta, dominio verificado y límites están en
+[síntesis](synthesis.md#dominio-escalar-efectivamente-verificado-42); evidencia
+en `target/analysis/scalar-synthesis/`. Las operaciones compuestas y el modelo
+completo todavía requieren sus propias puertas.

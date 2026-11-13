@@ -275,3 +275,52 @@ Es evidencia nativa con Rust 1.92.0, `aarch64-apple-darwin`, release, y demuestr
 el fallo del constructor histórico aun cuando el resultado real final sea 7.
 No demuestra imposibilidad de otra expansión One/Magma: obliga a comprobar
 las candidatas nuevas antes de ensamblar el modelo.
+
+### API y verificación escalar
+
+`synth::scalar::decode(F32Bits) -> Dyadic` extrae signo, mantisa impar y exponente
+con operaciones enteras. `synth::scalar::synthesize(&mut Arena, F32Bits)` devuelve
+un `NodeId` de esa arena o `BuildError`; no acepta activaciones, valores F64 ni
+resultados de un evaluador. `F32Bits::new(u32)` rechaza NaN/infinito. El algoritmo
+implementa la mantisa fraccionaria y H/D anteriores; no cambia `Rational`.
+
+```sh
+cargo test --release --test model_synthesis
+target/tiny-model/venv/bin/python -B tools/verify_scalar_corpus.py
+# Caso individual por bits, para reproducir un diagnóstico:
+cargo run --release --example verify_scalars -- --bits 3727c5ac
+```
+
+La herramienta externa valida hashes y procedencia del corpus antes de ejecutar
+el ejemplo Rust. Cada escalar se construye en una arena nueva, se compila como
+programa cerrado y se evalúa con ambos recorridos, sin reutilizar resultados.
+Límites explícitos por caso: 10000 nodos en construcción/compilación/planificación/
+evaluación, 10000 posiciones, corpus de hasta 4 MiB. Se inspeccionan todos los
+nodos, y las salidas se comparan con el F32 exacto elevado a F64 usando
+`1e-9 + 1e-7*abs(ref)` y entre evaluadores con `1e-12 + 1e-12*abs(ref)`.
+
+El primer fallo conserva bits, índice del corpus, procedencia tensor/índice,
+etapa y diagnóstico lógico cuando existe. No se excluye ni se sustituye; los
+casos posteriores se declaran no verificados. El reporte y logs quedan bajo
+`target/analysis/scalar-synthesis/`. Las fixtures locales comprueban metadatos,
+signos, ceros, magnitudes pequeñas/grandes, límites y procedencia; su éxito no
+reemplaza la comprobación de los 280688 valores requeridos.
+
+### Dominio escalar efectivamente verificado (4.2)
+
+La puerta completa pasó los **280688 valores distintos** del corpus fijado
+`d4c9207a3ea4e9b526bdc4c6b2a791cd6439586c853a8b58e6c3f9c2095677c5`, con ambos
+evaluadores y todos los límites anteriores. Máximos por programa: V=829,
+D=823, ocho posiciones numéricas. La mayor fracción del umbral escalar fue
+`3.1264782e-7` (muy inferior a 1). El máximo error absoluto fue `0.06689453125`
+en un corpus que incluye magnitudes de billones; no representa el error de
+las constantes pequeñas. Duración observada del recorrido completo: 12.685 s,
+sin carga de fuentes ni compilación Rust dentro de ese intervalo.
+
+La evidencia cubre los valores concretos del checkpoint, constantes y corpus,
+no todos los valores del intervalo entre sus extremos ni todos los F32 finitos.
+Tampoco garantiza composiciones: una suma/producto de escalares correctamente
+sintetizados aún puede fallar. La siguiente puerta debe verificar esas operaciones.
+`target/analysis/scalar-synthesis/report.json` conserva comandos, límites,
+revisión, hashes de fuentes/corpus, toolchain y contadores. Las 55 pruebas Rust
+y 20 doctests pasan, incluidos los contratos y tolerancias originales.
