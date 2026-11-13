@@ -181,6 +181,29 @@ pub(crate) fn matrix(shape: Shape) -> Result<[usize; 2], TensorError> {
     }
 }
 
+pub(crate) fn check_shape(expected: Shape, actual: Shape) -> Result<(), TensorError> {
+    if expected.rank != actual.rank {
+        return Err(TensorError::Rank {
+            actual: actual.rank,
+        });
+    }
+    for (axis, (&expected, &actual)) in expected
+        .dimensions()
+        .iter()
+        .zip(actual.dimensions())
+        .enumerate()
+    {
+        if expected != actual {
+            return Err(TensorError::Dimension {
+                axis,
+                expected,
+                actual,
+            });
+        }
+    }
+    Ok(())
+}
+
 pub(crate) trait TensorBuilder: Builder<Error = NativeError> {
     fn phase(&self) -> Phase;
     fn limits(&self) -> NativeLimits;

@@ -523,3 +523,39 @@ puertos, referencias ajenas y formas incompatibles. La ruta de plantilla se
 instancia con embeddings y se lee externamente; el fixture cerrado se compone
 con el evaluador prohibido. Ambos se contrastan con oráculos independientes y
 los dos lectores. Pasan 31 pruebas de biblioteca, Clippy y formato.
+
+## RMSNorm y SwiGLU (4.2)
+
+Los dos constructores nativos usan una implementación tensorial compartida en
+`src/native/components.rs`. Devuelven también las referencias de sus intermedios
+para trazas posteriores. RMSNorm conserva, por fila, cuadrados, reducción
+balanceada, producto por 1/64, suma de epsilon, inversa de raíz, normalización y
+producto por pesos. El ensamblador proporciona epsilon del paquete y escala
+real de la dimensión; no hay extracción de valores desde los handles.
+
+SwiGLU conserva negación, exponencial, denominador `1+exp(-gate)`, SiLU y producto
+por `up`, componente por componente. `silu_parts` comparte la expansión existente
+con `model::silu`; la huella estructural original sigue siendo idéntica. Los
+intermedios diagnósticos no seleccionados se recortan durante preparación/lectura.
+No se corrigen dominios inválidos: una normalización de cero con epsilon cero
+se construye sin evaluar y devuelve error en la lectura explícita.
+
+El verificador nativo reutiliza el mismo protocolo/corpus de componentes y sus
+oráculos, separados del `Input` que recibe la construcción. Bajo supervisión
+pasaron **741/741 casos**: **631 dots, 48 RMSNorm y 62 SwiGLU**, sin omitir casos
+de esas familias. Umbral `1e-6 + 1e-5*abs(ref)`, máxima fracción
+**0.0020050764041026478**; diferencial entre lectores **0**. Los 160 softmax del
+corpus corresponden a la aceptación de atención en 4.3.
+
+```sh
+cargo test --release --lib --test synthesis_structure --example verify_components
+target/tiny-model/venv/bin/python -B tools/verify_native_components.py \
+  --output-dir target/analysis/native-components-initial
+```
+
+Perfil registrado `native-components-v1`: un millón de nodos de base/cerrados/
+alcanzables por caso y 100000 posiciones numéricas. Corrida completa 6.066362 s,
+RSS global muestreado 30818304 bytes, máximo `wait4` **30834688 bytes**, 49 sondeos.
+Evidencia, casos, hashes y primer fallo si lo hubiera se conservan en el directorio
+indicado. `decode_with_events` expone las cinco fases de lectura al supervisor
+fuera de sus cronómetros; un fallo deja abierta su fase y conserva el diagnóstico.

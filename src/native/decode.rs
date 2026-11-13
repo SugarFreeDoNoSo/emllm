@@ -63,9 +63,22 @@ pub fn compile_output(
 /// Compila, planifica y ejecuta ambos lectores, comprobando todas las raíces con
 /// `1e-12 + 1e-12*abs(original)`. No selecciona token ni consulta referencias externas.
 pub fn decode(output: &NativeOutput, limits: NativeLimits) -> Result<DecodedOutput, NativeError> {
+    decode_with_events(output, limits, |_, _| {})
+}
+
+/// Observa inicio (`true`)/fin (`false`) de cada fase fuera de su cronómetro.
+/// Ante error la fase queda abierta para que el supervisor conserve el fallo.
+pub fn decode_with_events(
+    output: &NativeOutput,
+    limits: NativeLimits,
+    mut event: impl FnMut(Phase, bool),
+) -> Result<DecodedOutput, NativeError> {
+    event(Phase::Compile, true);
     let start = Instant::now();
     let (program, compilation) = compile_output(output, limits)?;
     let compile_seconds = start.elapsed().as_secs_f64();
+    event(Phase::Compile, false);
+    event(Phase::Plan, true);
     let start = Instant::now();
     let plan = plan(
         &program,
@@ -76,14 +89,20 @@ pub fn decode(output: &NativeOutput, limits: NativeLimits) -> Result<DecodedOutp
     )
     .map_err(|e| failure(Phase::Plan, NativeErrorKind::Plan(e)))?;
     let plan_seconds = start.elapsed().as_secs_f64();
+    event(Phase::Plan, false);
+    event(Phase::EvaluateOriginal, true);
     let start = Instant::now();
     let (original, original_buffers) = evaluate_with_storage(&program, limits.reachable_nodes)
         .map_err(|e| failure(Phase::EvaluateOriginal, NativeErrorKind::Evaluation(e)))?;
     let original_seconds = start.elapsed().as_secs_f64();
+    event(Phase::EvaluateOriginal, false);
+    event(Phase::EvaluatePlanned, true);
     let start = Instant::now();
     let (planned, planned_buffers) = run_with_storage(&plan, limits.reachable_nodes)
         .map_err(|e| failure(Phase::EvaluatePlanned, NativeErrorKind::Evaluation(e)))?;
     let planned_seconds = start.elapsed().as_secs_f64();
+    event(Phase::EvaluatePlanned, false);
+    event(Phase::Compare, true);
     let start = Instant::now();
     for (root, (&a, &b)) in original.iter().zip(&planned).enumerate() {
         if !a.is_finite() || !b.is_finite() || (a - b).abs() > 1e-12 + 1e-12 * a.abs() {
@@ -94,6 +113,7 @@ pub fn decode(output: &NativeOutput, limits: NativeLimits) -> Result<DecodedOutp
         }
     }
     let comparison_seconds = start.elapsed().as_secs_f64();
+    event(Phase::Compare, false);
     Ok(DecodedOutput {
         original,
         planned,
@@ -160,8 +180,21 @@ mod tests {
             evaluate_with_storage(&program, limits.reachable_nodes).unwrap_err(),
             run_with_storage(&plan, limits.reachable_nodes).unwrap_err()
         );
-        let failure = decode(&output, limits).unwrap_err();
+        let mut events = Vec::new();
+        let failure =
+            decode_with_events(&output, limits, |phase, start| events.push((phase, start)))
+                .unwrap_err();
         assert_eq!(failure.phase, Phase::EvaluateOriginal);
+        assert_eq!(
+            events,
+            [
+                (Phase::Compile, true),
+                (Phase::Compile, false),
+                (Phase::Plan, true),
+                (Phase::Plan, false),
+                (Phase::EvaluateOriginal, true)
+            ]
+        );
         assert!(
             matches!(failure.kind, NativeErrorKind::Evaluation(error) if error.kind == EvalErrorKind::LogDomain && error.node.is_some())
         );

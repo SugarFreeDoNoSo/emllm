@@ -153,8 +153,26 @@ pub(crate) fn inverse_sqrt<B: Builder>(arena: &mut B, x: &B::Ref) -> Result<B::R
 
 /// SiLU(x)=x/(1+exp(-x)); M(-x,E(-1)) construye el denominador directamente.
 pub(crate) fn silu<B: Builder>(arena: &mut B, x: &B::Ref) -> Result<B::Ref, B::Error> {
+    Ok(silu_parts(arena, x)?.activated)
+}
+
+pub(crate) struct SiluParts<R> {
+    pub negative: R,
+    pub denominator: R,
+    pub activated: R,
+}
+
+pub(crate) fn silu_parts<B: Builder>(
+    arena: &mut B,
+    x: &B::Ref,
+) -> Result<SiluParts<B::Ref>, B::Error> {
     let negative = neg(arena, x)?;
     let denominator = one_plus_exp(arena, &negative)?;
     let inverse = reciprocal_positive(arena, &denominator)?;
-    mul(arena, x, &inverse)
+    let activated = mul(arena, x, &inverse)?;
+    Ok(SiluParts {
+        negative,
+        denominator,
+        activated,
+    })
 }
